@@ -21,8 +21,13 @@ Both stay **private** (do not enable public TCP proxy).
 
 | Service | Public | Notes |
 |---|---|---|
-| `web` | **Yes** | Next.js portal (`apps/web/railway.json`); set `API_PROXY_URL=https://<api-domain>` so its `/api` rewrites target the api service. |
+| `web` | **Yes** | Next.js portal (`apps/web/railway.json`). **Required variable: `API_PROXY_URL=https://<api-domain>`** so `/api` rewrites target the api service. `next start` binds Railway's injected `PORT` automatically — do NOT hardcode a port. Healthcheck: `/auth/login`. |
 | `scheduler` | No | Job producer (`apps/scheduler/railway.json`); needs `DATABASE_URL` + `NODE_ENV`. Optional `SCHEDULER_TICK_SECONDS` (default 60). |
+
+**web deploy checklist (fixes the "healthcheck failed / service unavailable" run of 2026-09-01):**
+1. Pull the latest code (start script is now plain `next start` — binds `$PORT`).
+2. On the `web` service → Variables → set `API_PROXY_URL` = `https://<your-api-upstairs-domain>` (the api service's public URL).
+3. Redeploy. Healthcheck `/auth/login` should pass on the first attempt (~15s cold start).
 
 `PAYMENT_PROVIDER` on api: `mock` (default) until Daraja credentials are set — then switch to `mpesa` and add the `MPESA_*` secrets, with `MPESA_CALLBACK_URL=https://<api-domain>/api/v1/webhooks/mpesa`.
 

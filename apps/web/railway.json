@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "npm run start --workspace @nexora/web",
-    "healthcheckPath": "/",
+    "healthcheckPath": "/auth/login",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10

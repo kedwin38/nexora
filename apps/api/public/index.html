@@ -49,6 +49,11 @@
   .pkg .name { font-family: var(--mono); font-size: 14px; color: var(--txt); }
   .pkg .price { font-family: var(--mono); font-size: 20px; color: var(--acc); margin-top: 4px; }
   .pkg .meta { color: var(--dim); font-size: 11px; font-family: var(--mono); margin-top: 6px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tabs button { width: auto; background: transparent; color: var(--dim); border: 1px solid var(--line); padding: 6px 14px; font-size: 11px; }
+  .tabs button.active { color: var(--acc); border-color: var(--acc); }
+  .c3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  select { background: var(--bg); color: var(--txt); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font-family: var(--mono); margin-bottom: 12px; width: 100%; }
   #toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--acc); color: var(--txt); padding: 12px 16px; border-radius: 6px; font-family: var(--mono); font-size: 12px; display: none; max-width: 380px; z-index: 99; }
   .err { border-color: var(--crit) !important; }
   .hide { display: none !important; }
@@ -61,6 +66,7 @@
   <nav id="nav">
     <a href="/dashboard" data-p="dashboard">Dashboard</a>
     <a href="/packages" data-p="packages">Packages</a>
+    <a href="/guest" data-p="guest">Guest</a>
     <a href="/admin" data-p="admin">Admin</a>
   </nav>
 </header>
@@ -221,17 +227,83 @@ views.packages = async () => {
   };
 };
 
-views.admin = async () => {
+views.guest = () => {
+  $('#view').innerHTML = `
+    <h1>GUEST ACCESS</h1>
+    <div class="sub">// buy wifi instantly — no account needed (§36)</div>
+    <div class="grid c2">
+      <div class="card">
+        <div class="k">Purchase</div><br>
+        <input id="g-phone" placeholder="M-Pesa phone (07…)" />
+        <div id="g-pkgs" class="grid c2" style="gap:8px"></div>
+        <br><button id="g-go" disabled>Select a package</button>
+        <p class="sub" id="g-status" style="margin-top:10px"></p>
+      </div>
+      <div class="card">
+        <div class="k">Check status with access code</div><br>
+        <input id="g-code" placeholder="GST-XXXXXXXX" />
+        <button id="g-check">CHECK</button>
+        <p class="sub" id="g-out" style="margin-top:10px"></p>
+      </div>
+    </div>`;
+  let selected = null;
+  fetch(API + '/api/v1/packages').then(r => r.json()).then(r => {
+    const grid = $('#g-pkgs');
+    for (const p of r.data) {
+      const el = document.createElement('div');
+      el.className = 'pkg';
+      el.innerHTML = `<div class="name">${esc(p.name)}</div><div class="price">${fmtKes(p.priceMinor)}</div>`;
+      el.onclick = () => { selected = p; document.querySelectorAll('.pkg').forEach(x => x.classList.remove('sel')); el.classList.add('sel'); $('#g-go').disabled = false; $('#g-go').textContent = 'PAY ' + fmtKes(p.priceMinor); };
+      grid.appendChild(el);
+    }
+  });
+  $('#g-go').onclick = async () => {
+    $('#g-go').disabled = true;
+    $('#g-status').textContent = 'Sending STK push…';
+    try {
+      const res = await api('/api/v1/guests/purchase', { method: 'POST', body: JSON.stringify({
+        phone: $('#g-phone').value, packageId: selected.id, idempotencyKey: crypto.randomUUID(),
+        macAddress: '02:00:' + Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0').match(/.{2}/g).join(':').toUpperCase(),
+      })});
+      $('#g-status').textContent = 'STK sent. Access code: ' + res.accessCode + ' — polling…';
+      const code = res.accessCode;
+      const poll = setInterval(async () => {
+        const st = await api('/api/v1/guests/' + code);
+        if (st.serviceStatus === 'ONLINE') { clearInterval(poll); toast('Guest service ONLINE.'); $('#g-out').textContent = 'STATUS: ONLINE — ' + st.subscription.packageName; }
+        if (st.lastPaymentStatus === 'FAILED') { clearInterval(poll); toast('Payment failed.', true); $('#g-go').disabled = false; }
+      }, 3000);
+    } catch (e) { toast(e.message, true); $('#g-go').disabled = false; }
+  };
+  $('#g-check').onclick = async () => {
+    try {
+      const st = await api('/api/v1/guests/' + $('#g-code').value.trim());
+      $('#g-out').innerHTML = `STATUS: <span class="pill ${st.serviceStatus === 'ONLINE' ? 'SUCCESS' : 'PENDING'}">${st.serviceStatus}</span>` +
+        (st.subscription ? ` · ${esc(st.subscription.packageName)} · expires ${st.subscription.expiryTime ? new Date(st.subscription.expiryTime).toLocaleString() : '—'}` : '');
+    } catch (e) { toast(e.message, true); }
+  };
+};
+
+views.admin = async (tab) => {
   if (!store.get('user_token')) { toast('Operator login required', true); return views.login(); }
-  const [sum, pays, ops] = await Promise.all([
-    api('/api/v1/admin/summary').catch(() => null),
-    api('/api/v1/admin/payments?limit=12').catch(() => null),
-    api('/api/v1/admin/network-operations?limit=12').catch(() => null),
-  ]);
-  const s = sum?.summary || {};
+  tab = tab || (views.admin._tab || 'overview');
+  views.admin._tab = tab;
+  const tabs = ['overview', 'customers', 'packages', 'users', 'ops', 'triggers'];
   $('#view').innerHTML = `
     <h1>ADMIN COMMAND CENTER</h1>
-    <div class="sub">// business state · network state · audit</div>
+    <div class="sub">// business state · desired state · actual state · audit</div>
+    <div class="tabs" id="adm-tabs">${tabs.map(t => `<button class="${t === tab ? 'active' : ''}" data-tab="${t}">${t.toUpperCase()}</button>`).join('')}</div>
+    <div id="adm-body"><div class="card mono">LOADING…</div></div>`;
+  document.querySelectorAll('#adm-tabs button').forEach(b => b.onclick = () => views.admin(b.dataset.tab));
+  const body = $('#adm-body');
+
+  if (tab === 'overview') {
+    const [sum, pays, ops] = await Promise.all([
+      api('/api/v1/admin/summary').catch(() => null),
+      api('/api/v1/admin/payments?limit=12').catch(() => null),
+      api('/api/v1/admin/network-operations?limit=12').catch(() => null),
+    ]);
+    const s = sum?.summary || {};
+    body.innerHTML = `
     <div class="grid c4">
       <div class="card"><div class="k">Customers</div><div class="v">${s.customers ?? '—'}</div></div>
       <div class="card"><div class="k">Active subs</div><div class="v ok">${s.activeSubscriptions ?? '—'}</div></div>
@@ -249,11 +321,146 @@ views.admin = async () => {
         ${(ops?.data || []).map(o => `<tr><td>${esc(o.type)}</td><td>${pill(o.status)}</td><td>${esc(o.attempts)}</td><td>${esc(o.router)}</td><td>${o.status === 'PERMANENT_FAILURE' ? '<button class="ghost" data-retry="' + o.id + '">RETRY</button>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">queue empty</td></tr>'}
         </table></div>
     </div>`;
-  document.querySelectorAll('[data-retry]').forEach(b => {
-    b.onclick = async () => {
-      try { await api('/api/v1/admin/network-operations/' + b.dataset.retry + '/retry', { method: 'POST' }); toast('Re-queued.'); views.admin(); } catch (e) { toast(e.message, true); }
+    body.querySelectorAll('[data-retry]').forEach(b => {
+      b.onclick = async () => {
+        try { await api('/api/v1/admin/network-operations/' + b.dataset.retry + '/retry', { method: 'POST' }); toast('Re-queued.'); views.admin(); } catch (e) { toast(e.message, true); }
+      };
+    });
+  }
+
+  if (tab === 'customers') {
+    const cs = await api('/api/v1/admin/customers?limit=50');
+    body.innerHTML = `<div class="card"><div class="k">Customers — click for 3-pane detail (Business / Desired / Actual)</div><br>
+      <table><tr><th>Number</th><th>Type</th><th>Status</th><th>Phone</th><th>Package</th><th>Expiry</th><th></th></tr>
+      ${cs.data.map(c => `<tr><td class="mono">${esc(c.customerNumber)}</td><td>${esc(c.accountType)}</td><td>${pill(c.status)}</td><td>${esc(c.phone || '—')}</td><td>${esc(c.activeSubscription?.packageName || '—')}</td><td>${c.activeSubscription?.expiryTime ? new Date(c.activeSubscription.expiryTime).toLocaleString() : '—'}</td><td><button class="ghost" data-cust="${c.id}">INSPECT</button></td></tr>`).join('') || '<tr><td colspan="7" class="sub">none</td></tr>'}
+      </table></div><div id="cust-detail"></div>`;
+    body.querySelectorAll('[data-cust]').forEach(b => b.onclick = async () => {
+      const d = await api('/api/v1/admin/customers/' + b.dataset.cust);
+      const dv = d.desiredNetworkState, ac = d.actualNetworkState;
+      $('#cust-detail').innerHTML = `<br><div class="grid c3">
+        <div class="card"><div class="k">BUSINESS STATE</div><br>
+          <table>
+            <tr><td>Sub</td><td>${pill(d.business.subscription?.status || 'NONE')}</td></tr>
+            <tr><td>Package</td><td>${esc(d.business.subscription?.packageName || '—')}</td></tr>
+            <tr><td>FUP</td><td>${d.business.subscription?.fup ? pill(d.business.subscription.fup.state) + ' ' + (Number(d.business.subscription.fup.usedBytes)/1e9).toFixed(1) + '/' + (Number(d.business.subscription.fup.limitBytes)/1e9).toFixed(1) + 'GB' : '—'}</td></tr>
+            <tr><td>Payments</td><td>${d.business.payments.length}</td></tr>
+          </table></div>
+        <div class="card"><div class="k">DESIRED NETWORK STATE</div><br>
+          <table>
+            <tr><td>Version</td><td>v${dv?.version ?? '—'}</td></tr>
+            <tr><td>Authorized</td><td>${dv?.state?.authorized ?? '—'}</td></tr>
+            <tr><td>Rate</td><td>${dv?.state?.rateLimit ? dv.state.rateLimit.downloadKbps + 'k/' + dv.state.rateLimit.uploadKbps + 'k' : '—'}</td></tr>
+            <tr><td>Synced</td><td>${dv?.synchronizedAt ? new Date(dv.synchronizedAt).toLocaleString() : 'never'}</td></tr>
+          </table></div>
+        <div class="card"><div class="k">ACTUAL NETWORK STATE</div><br>
+          <table>
+            <tr><td>Last op</td><td>${ac ? esc(ac.lastOperation.type) + ' ' + pill(ac.lastOperation.status) : '—'}</td></tr>
+            <tr><td>Verified</td><td>${ac?.lastOperation?.verifiedAt ? new Date(ac.lastOperation.verifiedAt).toLocaleString() : '—'}</td></tr>
+            <tr><td>Drift</td><td>${pill(d.driftVerdict === 'SYNCHRONIZED' ? 'SUCCESS' : d.driftVerdict === 'DRIFTED' ? 'FAILED' : 'PENDING')}</td></tr>
+            <tr><td>Devices</td><td>${d.devices.length}</td></tr>
+          </table></div>
+      </div>`;
+    });
+  }
+
+  if (tab === 'packages') {
+    const pkgs = await api('/api/v1/admin/packages');
+    body.innerHTML = `<div class="grid c2">
+      <div class="card"><div class="k">Packages</div><br>
+        <table><tr><th>Name</th><th>v</th><th>Status</th><th>Price</th><th>Speed</th><th></th></tr>
+        ${pkgs.data.map(p => `<tr><td>${esc(p.name)}</td><td>v${p.version}</td><td>${pill(p.status)}</td><td>${fmtKes(p.priceMinor)}</td><td>${p.policy ? p.policy.downloadKbps + '/' + p.policy.uploadKbps + 'k' : '—'}</td><td>${p.status === 'ACTIVE' ? '<button class="ghost" data-retire="' + p.id + '">RETIRE</button>' : ''}</td></tr>`).join('')}
+        </table></div>
+      <div class="card"><div class="k">Create package (edits create new versions — history immutable)</div><br>
+        <input id="np-name" placeholder="name (e.g. Month Pass)" />
+        <input id="np-price" placeholder="price KES (minor units, e.g. 50000)" />
+        <input id="np-duration" placeholder="duration seconds (e.g. 2592000)" />
+        <input id="np-down" placeholder="download kbps (e.g. 10240)" />
+        <input id="np-up" placeholder="upload kbps (e.g. 5120)" />
+        <input id="np-fup" placeholder="FUP limit bytes (optional, e.g. 53687091200)" />
+        <button id="np-go">CREATE</button></div></div>`;
+    body.querySelector('#np-go').onclick = async () => {
+      try {
+        await api('/api/v1/admin/packages', { method: 'POST', body: JSON.stringify({
+          name: $('#np-name').value, priceMinor: Number($('#np-price').value), durationSeconds: Number($('#np-duration').value),
+          policy: { downloadKbps: Number($('#np-down').value), uploadKbps: Number($('#np-up').value), ...( $('#np-fup').value ? { fupLimitBytes: $('#np-fup').value } : {}) },
+        })});
+        toast('Package created.'); views.admin('packages');
+      } catch (e) { toast(e.message, true); }
     };
-  });
+    body.querySelectorAll('[data-retire]').forEach(b => b.onclick = async () => {
+      try { await api('/api/v1/admin/packages/' + b.dataset.retire, { method: 'DELETE' }); toast('Retired.'); views.admin('packages'); } catch (e) { toast(e.message, true); }
+    });
+  }
+
+  if (tab === 'users') {
+    const [users, roles] = await Promise.all([api('/api/v1/admin/users'), api('/api/v1/admin/roles')]);
+    const roleNames = roles.data.map(r => r.name);
+    body.innerHTML = `<div class="grid c2">
+      <div class="card"><div class="k">Staff users</div><br>
+        <table><tr><th>Email</th><th>Role</th><th>Status</th><th>Last login</th></tr>
+        ${users.data.map(u => `<tr><td>${esc(u.email)}</td><td><select data-user="${u.id}">${roleNames.map(r => `<option ${r === u.role ? 'selected' : ''}>${r}</option>`).join('')}</select></td><td>${pill(u.status)}</td><td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : '—'}</td></tr>`).join('')}
+        </table></div>
+      <div class="card"><div class="k">Create staff user</div><br>
+        <input id="nu-email" placeholder="email" />
+        <input id="nu-pass" type="password" placeholder="password (min 10 chars)" />
+        <input id="nu-name" placeholder="display name" />
+        <select id="nu-role">${roleNames.map(r => `<option>${r}</option>`).join('')}</select>
+        <button id="nu-go">CREATE</button>
+        <p class="sub" style="margin-top:8px">Role changes revoke live sessions — new permissions apply at next login. All audited.</p></div></div>`;
+    body.querySelectorAll('select[data-user]').forEach(sel => sel.onchange = async () => {
+      try { await api('/api/v1/admin/users/' + sel.dataset.user, { method: 'PATCH', body: JSON.stringify({ role: sel.value }) }); toast('Role assigned + sessions revoked.'); } catch (e) { toast(e.message, true); }
+    });
+    body.querySelector('#nu-go').onclick = async () => {
+      try { await api('/api/v1/admin/users', { method: 'POST', body: JSON.stringify({ email: $('#nu-email').value, password: $('#nu-pass').value, displayName: $('#nu-name').value, role: $('#nu-role').value }) }); toast('User created.'); views.admin('users'); } catch (e) { toast(e.message, true); }
+    };
+  }
+
+  if (tab === 'ops') {
+    const [sessions, ops] = await Promise.all([
+      api('/api/v1/admin/sessions').catch(() => null),
+      api('/api/v1/admin/network-operations?limit=25').catch(() => null),
+    ]);
+    body.innerHTML = `<div class="grid c2">
+      <div class="card"><div class="k">Live sessions</div><br>
+        <table><tr><th>Customer</th><th>MAC</th><th>Status</th><th>↓/↑</th><th></th></tr>
+        ${(sessions?.data || []).map(s => `<tr><td>${esc(s.customer)}</td><td class="mono">${esc(s.macAddress)}</td><td>${pill(s.status)}</td><td>${s.downloadBytes}/${s.uploadBytes}</td><td><button class="ghost" data-disc="${s.id}">DISCONNECT</button></td></tr>`).join('') || '<tr><td colspan="5" class="sub">no active sessions</td></tr>'}
+        </table></div>
+      <div class="card"><div class="k">Network operations</div><br>
+        <table><tr><th>Type</th><th>Status</th><th>Att.</th><th>Router</th><th></th></tr>
+        ${(ops?.data || []).map(o => `<tr><td>${esc(o.type)}</td><td>${pill(o.status)}</td><td>${esc(o.attempts)}</td><td>${esc(o.router)}</td><td>${o.status === 'PERMANENT_FAILURE' ? '<button class="ghost" data-retry="' + o.id + '">RETRY</button>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">queue empty</td></tr>'}
+        </table></div></div>`;
+    body.querySelectorAll('[data-disc]').forEach(b => b.onclick = async () => {
+      try { await api('/api/v1/admin/sessions/' + b.dataset.disc + '/disconnect', { method: 'POST' }); toast('Disconnect queued.'); views.admin('ops'); } catch (e) { toast(e.message, true); }
+    });
+    body.querySelectorAll('[data-retry]').forEach(b => b.onclick = async () => {
+      try { await api('/api/v1/admin/network-operations/' + b.dataset.retry + '/retry', { method: 'POST' }); toast('Re-queued.'); views.admin('ops'); } catch (e) { toast(e.message, true); }
+    });
+  }
+
+  if (tab === 'triggers') {
+    const pc = await api('/api/v1/admin/payment-config').catch(() => null);
+    body.innerHTML = `<div class="grid c2">
+      <div class="card"><div class="k">Payment configuration (§4.1)</div><br>
+        <table>
+          <tr><td>Provider</td><td class="mono">${esc(pc?.provider || '—')}</td></tr>
+          <tr><td>Daraja configured</td><td>${pc?.daraja?.configured ? pill('SUCCESS') : pill('PENDING')} ${pc?.daraba?.configured ? '' : '(mock mode until MPESA_* secrets are set)'}</td></tr>
+          <tr><td>Daraja env</td><td>${esc(pc?.daraja?.environment || '—')}</td></tr>
+          <tr><td>Callback URL</td><td class="mono">${esc(pc?.daraja?.callbackUrl || 'not set')}</td></tr>
+        </table>
+        <p class="sub" style="margin-top:8px">${esc(pc?.note || '')}</p>
+        <button class="ghost" id="trig-pay">RUN PAYMENT RECONCILIATION</button></div>
+      <div class="card"><div class="k">Network reconciliation (§4.4)</div><br>
+        <p class="sub">Detects desired-vs-actual drift across subscribers and queues repair operations with read-back verification.</p>
+        <button class="ghost" id="trig-net">RUN NETWORK RECONCILIATION</button>
+        <br><br><div class="k">Router health</div>
+        <p class="sub">Health polling runs on the scheduler (every minute).</p></div></div>`;
+    body.querySelector('#trig-pay').onclick = async () => {
+      try { await api('/api/v1/admin/payment-config/reconcile', { method: 'POST' }); toast('Payment reconciliation queued.'); } catch (e) { toast(e.message, true); }
+    };
+    body.querySelector('#trig-net').onclick = async () => {
+      try { await api('/api/v1/admin/network/reconcile', { method: 'POST' }); toast('Network reconciliation queued.'); } catch (e) { toast(e.message, true); }
+    };
+  }
 };
 
 // ---------- Router ----------
@@ -261,6 +468,7 @@ const path = location.pathname;
 if (path.startsWith('/auth')) views.login();
 else if (path === '/dashboard') views.dashboard();
 else if (path === '/packages') views.packages();
+else if (path === '/guest') views.guest();
 else if (path === '/admin') views.admin();
 else {
   // Landing: route by session

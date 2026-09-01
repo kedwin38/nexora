@@ -21,7 +21,7 @@ Every entry: impact + remediation plan + trigger.
 - **Remediation (optional later):** split into `AuditActorUser` / `AuditActorCustomer` join tables or a polymorphic FK trigger.
 - **Trigger:** first audit-integrity report request.
 
-## TD-004: Customer tokens are stateless (not revocable server-side)
+## TD-004: RESOLVED — CustomerAuthSession table (customer tokens revocable)
 
 - **Impact:** A leaked customer token is valid until expiry (default 24h); staff tokens ARE revocable via UserSession.
 - **Why accepted:** customers hold no privileges beyond their own data; adding a CustomerSession store is pure schema work.
@@ -38,4 +38,23 @@ Every entry: impact + remediation plan + trigger.
 - **Why accepted:** small, stable wire protocol; adapter confines all usage; mock adapter decouples tests.
 - **Remediation:** migrate transport to `routeros-client` or a thin self-maintained API-protocol client when hardware verification happens (KR-3).
 - **Trigger:** KR-3 hardware verification or first upstream breakage.
+
+## TD-007: RESOLVED — TendaAdapter skeleton (CAP_HEALTH only, explicit errors, tested)
+
+- **Impact:** Capability model + explicit `CapabilityNotSupportedError` exist, but no TendaAdapter file.
+- **Remediation:** trivial skeleton once Tenda's management API surface is confirmed (likely health-only: CAP_HEALTH).
+- **Trigger:** first Tenda device in the field, or persona-completion sweep.
+
+## TD-008: RESOLVED — guest purchase E2E + live drift-repair E2E both green
+
+- **Impact:** Guests purchase via the same verified path but `GuestAccess` identity isn't E2E-exercised; drift repair is engine-tested + mock-tested but not via live router tampering between cycles.
+- **Remediation:** extend harness — guest purchase (no account) + flip MockRouter state between reconcile cycles.
+- **Trigger:** next harness maintenance pass.
+
+## TD-009: RESOLVED — package CRUD w/ versioning, users+roles, payment-config, triggers, 3-pane detail (API + both UIs)
+
+- **Impact:** Missing: package CRUD endpoints/UI, user+role management endpoints/UI, payment-config status/rotate-trigger view, reconciliation manual trigger, 3-pane Business/Desired/Actual customer detail.
+- **Why accepted:** RBAC, audit, ops commands (retry/disconnect/FUP-reset) are live; the remainder is control-plane CRUD over an existing, seeded model.
+- **Remediation:** Stage 7+ polish — one route module + admin tab.
+- **Trigger:** operator onboarding for production.
 

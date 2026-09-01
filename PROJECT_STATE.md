@@ -6,8 +6,9 @@ Live project status. Read this first when resuming work. Update after every chec
 
 ## CurrentObjectives
 
-- **Stages 1–9 COMPLETE.** Primary E2E **27/27**, chaos/security E2E **15/15**, unit **151/151**.
-- Remaining (ops/user-side only): Railway deploy of web+scheduler, SMS gateway creds, MikroTik hardware verification (KR-3), attach Postgres/Redis env vars (RAILWAY_SETUP.md).
+- **ALL persona §9 criteria ✅ (see docs/COMPLETION_AUDIT.md).** Unit 161/161 · E2E 37/37 · chaos/security 15/15 · live local stack verified.
+- TD-001…TD-009: **all resolved or planned** (TD-002 image prune, TD-003 audit FK, TD-006 node-routeros — all low, documented).
+- Remaining = **user-side ops only**: Railway vars + web/scheduler deploy, Daraja creds, MikroTik hardware verification, SMS gateway creds.
 
 ## BuildOrder (from persona §6 — sequential, do not skip)
 

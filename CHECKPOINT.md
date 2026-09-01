@@ -1,4 +1,84 @@
-# CHECKPOINT — Stage 9 complete (chaos + security verified)
+# CHECKPOINT — Commercial-readiness sweep COMPLETE (all 19 criteria ✅)
+
+**Date:** 2026-09-01 (final) · **Status: unit 161/161 · e2e 37/37 · chaos+security 15/15 · live stack verified**
+
+## What Was Built (this pass — "implement every remaining element")
+
+- **TD-004 resolved — revocable customer sessions**: `CustomerAuthSession` table (migration `20260902000000`), session-store persists/revokes both staff and customer token hashes.
+- **TD-007 resolved — TendaAdapter skeleton**: CAP_HEALTH-only (TCP probe health), every control op throws `CapabilityNotSupportedError` — 9 tests pin the contract.
+- **TD-009 resolved — complete admin control surface (persona §4)**:
+  - Package CRUD: create / **version-aware update (vN+1, old retired — history immutable, §4.2)** / retire; UI in both portals.
+  - Users + roles: create staff, reassign roles (**revokes live sessions so new permissions apply immediately**), revoke-sessions endpoint; 7-role matrix exposed; UI with inline role selects.
+  - `GET /api/v1/admin/customers/:id` → **3-pane Business / Desired / Actual + drift verdict**; INSPECT in both consoles.
+  - `GET /api/v1/admin/payment-config` (presence booleans only — ADR-008 honored) + `POST /reconcile` trigger.
+  - `POST /api/v1/admin/network/reconcile` manual drift sweep trigger.
+- **TD-008 resolved — guest + drift E2E**:
+  - Guest flow (§36): `POST /api/v1/guests/purchase` (no account) → GUEST customer + `GuestAccess` code w/ TTL → callback → `GET /api/v1/guests/:code` polls to **ONLINE**; portal `/guest` page.
+  - **Live drift-repair E2E**: desired state forced to 999k on an ACTIVE sub → admin triggers network reconciliation → engine detects drift → RECONCILE_SYNC op → network-worker repairs with read-back → policy synchronized.
+- **Payment reconciliation engine (§75)**: stale PENDING (>5min) → provider `queryTransaction` → confirm via the SAME activation transaction / fail / leave; worker job + admin trigger; worker now builds the real payment provider (mock|Daraja) from env.
+- **Activation extracted** to `@nexora/engines/activation.ts` — webhook + mock-autoconfirm + reconciliation share ONE transactional path (was duplicated in webhook route).
+- **Executor improvement**: verified writes now mark `networkPolicy.synchronizedAt` immediately (3-pane truth without waiting a full reconcile cycle).
+- **Next.js admin rebuilt**: 6 tabs (overview/customers/packages/users/ops/triggers) with the 3-pane INSPECT view.
+
+## Verification
+
+| Gate | Result |
+|---|---|
+| typecheck / lint / bundles / web build | ✅ |
+| unit | ✅ **161/161** (11 files) |
+| `npm run e2e` | ✅ **37/37** (was 27 — +guest, +package versioning, +user/role, +3-pane, +payment-config, +recon trigger, +live drift repair) |
+| `npm run e2e:chaos` | ✅ **15/15** |
+| Live stack | ✅ root/guest portal 200; admin packages(3)/users/roles(7) endpoints live |
+
+**Defects found & fixed this pass:** admin-auth header used a token object (harness bug); drift test initially targeted an EXPIRED subscription (legitimately matches absence); `ClaimedOperation` missing `subscriptionId`; PS-escape artifacts in harness.
+
+## Remaining — strictly user-side ops
+
+1. Railway: attach Postgres/Redis, set vars (`RAILWAY_SETUP.md`), deploy `web` + `scheduler` services.
+2. `PAYMENT_PROVIDER=mpesa` + Daraja credentials → real STK pushes.
+3. MikroTik hardware verification (`ROUTER_ADAPTER=mikrotik` + RB750UPr, KR-3).
+4. SMS gateway credentials → swap LogNotificationSender for a real sender (port unchanged).
+
+---
+
+# (Previous) CHECKPOINT — Dev stack live + completion audit
+
+**Date:** 2026-09-01 (final) · **Status: Stages 1–9 complete · local stack RUNNING**
+
+## What Was Built (this pass)
+
+- **`npm run dev:stack`** — one-command persistent local stack: embedded PostgreSQL (data survives restarts in `.tmp/pg-dev`), migrations + seed, api(:5000) + worker + network-worker + scheduler, MOCK payments with **auto-confirm after 3s** (dev-only, `MOCK_PAYMENT_AUTO_CONFIRM_MS`, mock provider only), MOCK router. Banner prints portal URL + admin creds (`admin@nexora.isp / Admin!2026`, override via env).
+- **Bug found & fixed: pino pretty transport vs bundles** — `pino.transport({target:'pino-pretty'})` spawns a worker thread whose path breaks in esbuild bundles (`dist/lib/worker.js` MODULE_NOT_FOUND) in dev mode. Logger now uses pino-pretty as a synchronous **stream** (no worker). Harnesses never hit it (production mode); dev-mode boot did.
+- **Mock payment auto-confirm** (dev-only, gated to MockPaymentProvider) so the local purchase flow completes with no phone.
+- **Railway configs** for `web` (public, healthcheck `/`, needs `API_PROXY_URL`) and `scheduler`; RAILWAY_SETUP.md updated.
+- **`docs/COMPLETION_AUDIT.md`** — honest criterion-by-criterion accounting vs persona §9 (14 ✅ / 5 ◐ with tracked debts TD-007/8/9); TD-007/8/009 added.
+
+## Live verification (real HTTP against the running stack)
+
+```
+GET  /                    → {"message":"Nexora API is online"}
+GET  /auth/login          → 200 (portal)
+POST customers/login      → token
+POST payments/initiate    → PENDING (STK sent)
+(3s auto-confirm)
+GET  customers/me         → subscription=ACTIVE pkg=Day Pass fup=NORMAL 0/5GB
+POST auth/login (admin)   → token; summary: customers=1 activeSubs=1 revenue=KES30 queuedOps=0
+network-operations        → AUTHORIZE → SUCCESS (read-back verified)
+```
+
+## Note for the operator
+
+An external merge/sync introduced conflict markers into `apps/api/src/index.ts` during this session (resolved by hand, kept both sides: plugins + root endpoint). If you sync this repo from another machine, expect build artifacts (`dist/`) to differ — rebuild with `npm run build` after any sync.
+
+## State
+
+- Suites: unit 151/151 · e2e 27/27 · chaos+security 15/15 (re-run after logger fix)
+- Stack left RUNNING at http://localhost:5000 (dev:stack in background)
+- Remaining: user-side only (Railway vars, web/scheduler deploy, SMS creds, MikroTik hardware)
+
+---
+
+# (Previous) CHECKPOINT — Stage 9 complete (chaos + security verified)
 
 **Date:** 2026-09-01 (late) · **Status: primary E2E 27/27 · chaos/security 15/15 · unit 151/151**
 

@@ -44,6 +44,7 @@ interface DesiredStateShape {
 interface ClaimedOperation {
   readonly id: string;
   readonly routerId: string;
+  readonly subscriptionId: string | null;
   readonly operationType: string;
   readonly desiredState: unknown;
   readonly attempts: number;
@@ -150,6 +151,14 @@ async function executeOperation(
           verificationResult: { verified: true, matchesDesired: report.matchesDesired },
         },
       });
+      // A verified write proves desired == actual — mark the policy
+      // synchronized so the 3-pane view and reconciliation agree immediately.
+      if (op.subscriptionId !== null) {
+        await prisma.networkPolicy.updateMany({
+          where: { subscriptionId: op.subscriptionId },
+          data: { synchronizedAt: new Date() },
+        }).catch(() => undefined);
+      }
     } else {
       await prisma.networkOperation.update({
         where: { id: op.id },
@@ -302,6 +311,7 @@ async function main(): Promise<void> {
     await executeOperation(prisma, logger, mode, mockRouter, {
       id: op.id,
       routerId: op.routerId,
+      subscriptionId: op.subscriptionId,
       operationType: op.operationType,
       desiredState: op.desiredState,
       attempts: op.attempts + 1,

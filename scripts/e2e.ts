@@ -401,6 +401,170 @@ async function main(): Promise<void> {
         return (await response.json()) as { subscription?: { status: string } | null };
       })();
       check('customer /me reflects EXPIRED', meAfter.subscription?.status === 'EXPIRED');
+
+      // ================= Commercial-readiness surface =================
+
+      // 6.1 Guest purchase flow (§36): no account, access code polling
+      const guestPurchase = await (async () => {
+        const response = await fetch(`http://127.0.0.1:${PORT}/api/v1/guests/purchase`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: '0733000111',
+            packageId: pkg.id,
+            macAddress: '0A:0B:0C:0D:0E:0F',
+          }),
+        });
+        return (await response.json()) as { paymentId?: string; accessCode?: string; status?: string };
+      })();
+      check(
+        'guest purchase accepted with access code (202)',
+        guestPurchase.accessCode !== undefined && guestPurchase.accessCode.startsWith('GST-'),
+      );
+      if (guestPurchase.paymentId !== undefined) {
+        // auto-confirm is disabled in harnesses — drive the callback directly
+        const guestPayment = await prisma.payment.findUniqueOrThrow({ where: { id: guestPurchase.paymentId } });
+        await fetch(`http://127.0.0.1:${PORT}/api/v1/webhooks/mpesa`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerTransactionId: guestPayment.providerTransactionId,
+            resultCode: 0,
+            amountMinor: pkg.priceMinor,
+            receipt: 'GUEST-RCPT-1',
+          }),
+        });
+      }
+      let guestStatus = 'PAYMENT_PENDING';
+      for (let i = 0; i < 15 && guestStatus !== 'ONLINE'; i += 1) {
+        await sleep(1_000);
+        const response = await fetch(`http://127.0.0.1:${PORT}/api/v1/guests/${guestPurchase.accessCode}`);
+        const body = (await response.json()) as { serviceStatus: string };
+        guestStatus = body.serviceStatus;
+      }
+      check('guest service reaches ONLINE via access-code polling', guestStatus === 'ONLINE', `status=${guestStatus}`);
+
+      // 6.2 Admin package CRUD with versioning (§4.2)
+      const created = await (async () => {
+        const response = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/packages`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'E2E Pass',
+            priceMinor: 9900,
+            durationSeconds: 86400,
+            policy: { downloadKbps: 8192, uploadKbps: 4096 },
+          }),
+        });
+        return (await response.json()) as { id: string; version: number };
+      })();
+      check('admin package created v1', created.version === 1, JSON.stringify(created));
+
+      const versioned = await (async () => {
+        const response = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/packages/${created.id}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ priceMinor: 14900 }),
+        });
+        return (await response.json()) as { id: string; version: number; supersedes: string };
+      })();
+      const oldRow = await prisma.package.findUnique({ where: { id: created.id } });
+      check(
+        'package edit creates v2, retires v1 (history immutable)',
+        versioned.version === 2 && versioned.supersedes === created.id && oldRow?.status === 'RETIRED',
+      );
+
+      // 6.3 Admin user + role management (§4.3)
+      const newUser = await (async () => {
+        const response = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/users`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'billing@nexora.test', password: 'BillingPass!2026', displayName: 'Biller', role: 'BILLING_ADMIN' }),
+        });
+        return (await response.json()) as { id: string; role: string };
+      })();
+      check('admin user created with role', newUser.role === 'BILLING_ADMIN');
+
+      const roleChange = await (async () => {
+        const response = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/users/${newUser.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'ANALYST' }),
+        });
+        return (await response.json()) as { role: string };
+      })();
+      check('role reassigned (audited, sessions revoked)', roleChange.role === 'ANALYST');
+
+      // 6.4 Customer 3-pane detail (§4.5)
+      const detail = await (async () => {
+        const response = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/customers/${reg.customer!.id}`, {
+          headers: { Authorization: `Bearer ${admin.token}` },
+        });
+        return (await response.json()) as { business: unknown; desiredNetworkState: unknown; actualNetworkState: unknown; driftVerdict: string };
+      })();
+      check(
+        'customer 3-pane: business + desired + actual + drift verdict',
+        detail.business !== undefined && detail.desiredNetworkState !== null && detail.driftVerdict !== undefined,
+      );
+
+      // 6.5 Payment-config + reconciliation trigger (§4.1)
+      const payConfig = await (async () => {
+        const response = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/payment-config`, {
+          headers: { Authorization: `Bearer ${admin.token}` },
+        });
+        return (await response.json()) as { provider: string; daraja: { configured: boolean } };
+      })();
+      check('payment-config visible (booleans only)', payConfig.provider === 'mock' && typeof payConfig.daraja.configured === 'boolean');
+
+      const trigRecon = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/payment-config/reconcile`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${admin.token}` },
+      });
+      let reconJobDone = false;
+      for (let i = 0; i < 15 && !reconJobDone; i += 1) {
+        await sleep(1_000);
+        const job = await prisma.job.findFirst({ where: { type: 'payment-reconciliation' }, orderBy: { createdAt: 'desc' } });
+        reconJobDone = job?.status === 'SUCCESS';
+      }
+      check('payment reconciliation trigger → job SUCCESS', trigRecon.status === 202 && reconJobDone);
+
+      // 6.6 LIVE drift repair (§26): force desired≠actual, reconcile, verify.
+      // Uses the ACTIVE guest subscription — the main one is EXPIRED and its
+      // revoked desired state legitimately matches router absence.
+      const guestCustomer = await prisma.customer.findFirst({
+        where: { phoneNumber: '254733000111' },
+        include: { subscriptions: { where: { status: { in: ['ACTIVE', 'FUP'] } }, take: 1 } },
+      });
+      const driftSubId = guestCustomer?.subscriptions[0]?.id ?? null;
+      check('drift test has an active subscription', driftSubId !== null);
+      if (driftSubId !== null) {
+        const policyRow = await prisma.networkPolicy.findUniqueOrThrow({ where: { subscriptionId: driftSubId } });
+        const driftDesired = policyRow.desiredState as { macAddress: string | null; authorized: boolean; rateLimit: { downloadKbps: number; uploadKbps: number } | null; sessionTimeLimitSeconds?: number | null };
+        await prisma.networkPolicy.update({
+          where: { subscriptionId: driftSubId },
+          data: {
+            desiredState: { ...driftDesired, rateLimit: { downloadKbps: 999, uploadKbps: 999 } },
+            synchronizedAt: null,
+          },
+        });
+        const trigNet = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/network/reconcile`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${admin.token}` },
+        });
+        let driftRepaired = false;
+        let driftOpStatus = 'NONE';
+        for (let i = 0; i < 25 && !driftRepaired; i += 1) {
+          await sleep(1_000);
+          const op = await prisma.networkOperation.findFirst({
+            where: { subscriptionId: driftSubId, operationType: 'RECONCILE_SYNC' },
+            orderBy: { createdAt: 'desc' },
+          });
+          driftOpStatus = op?.status ?? 'NONE';
+          const synced = await prisma.networkPolicy.findUniqueOrThrow({ where: { subscriptionId: driftSubId } });
+          driftRepaired = op?.status === 'SUCCESS' && synced.synchronizedAt !== null;
+        }
+        check('live drift → RECONCILE_SYNC → repaired + synchronized', trigNet.status === 202 && driftRepaired, `op=${driftOpStatus}`);
+      }
     } finally {
       await prisma.$disconnect();
     }

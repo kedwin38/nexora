@@ -21,6 +21,7 @@
     "test:coverage": "vitest run --coverage",
     "e2e": "tsx scripts/e2e.ts",
     "e2e:chaos": "tsx scripts/e2e-chaos.ts",
+    "dev:stack": "tsx scripts/dev-stack.ts",
     "db:generate": "npm run generate -w @nexora/db",
     "db:validate": "npm run validate -w @nexora/db",
     "db:migrate": "npm run migrate -w @nexora/db",

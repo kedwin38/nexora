@@ -17,6 +17,15 @@ In the Railway project → **New** → **Database**:
 
 Both stay **private** (do not enable public TCP proxy).
 
+## 1b. Remaining services
+
+| Service | Public | Notes |
+|---|---|---|
+| `web` | **Yes** | Next.js portal (`apps/web/railway.json`); set `API_PROXY_URL=https://<api-domain>` so its `/api` rewrites target the api service. |
+| `scheduler` | No | Job producer (`apps/scheduler/railway.json`); needs `DATABASE_URL` + `NODE_ENV`. Optional `SCHEDULER_TICK_SECONDS` (default 60). |
+
+`PAYMENT_PROVIDER` on api: `mock` (default) until Daraja credentials are set — then switch to `mpesa` and add the `MPESA_*` secrets, with `MPESA_CALLBACK_URL=https://<api-domain>/api/v1/webhooks/mpesa`.
+
 ## 2. Set variables on each app service
 
 ### `api` (public service)

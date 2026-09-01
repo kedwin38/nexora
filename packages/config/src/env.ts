@@ -33,6 +33,9 @@ export const apiEnvSchema = databaseEnvSchema.merge(redisEnvSchema).extend({
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(24),
   /** mock = deterministic in-process provider (local/dev); mpesa = Daraja. */
   PAYMENT_PROVIDER: z.enum(['mock', 'mpesa']).default('mock'),
+  /** When the mock provider is active, auto-confirm purchases after N ms so
+   *  the full flow completes without a phone (local/dev only). */
+  MOCK_PAYMENT_AUTO_CONFIRM_MS: z.coerce.number().int().min(0).default(3000),
   /** mock = in-memory router (local/dev); mikrotik = RouterOS API. */
   ROUTER_ADAPTER: z.enum(['mock', 'mikrotik']).default('mock'),
   CORS_ORIGIN: z.string().default('*'),

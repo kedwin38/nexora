@@ -260,6 +260,22 @@ model UserSession {
   @@index([userId, expiresAt])
 }
 
+/// Customer auth-session store — makes customer tokens revocable (TD-004).
+/// (Network sessions are the CustomerSession model below.)
+model CustomerAuthSession {
+  id         String    @id @default(uuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  ip         String?
+  userAgent  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId, expiresAt])
+}
+
 // ===========================================================================
 // CUSTOMER / GUEST / DEVICE
 // ===========================================================================
@@ -281,6 +297,7 @@ model Customer {
 
   devices       Device[]
   guestAccess   GuestAccess?
+  authSessions  CustomerAuthSession[]
   payments      Payment[]
   subscriptions Subscription[]
   sessions      CustomerSession[]

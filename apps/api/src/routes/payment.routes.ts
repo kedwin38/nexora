@@ -12,9 +12,46 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { ForbiddenError, NotFoundError, ValidationError } from '@nexora/domain';
-import { normalizeKenyanMsisdn } from '@nexora/payment-sdk';
+import { MockPaymentProvider, normalizeKenyanMsisdn } from '@nexora/payment-sdk';
+import { activateOnPaymentSuccess } from '@nexora/engines';
 import type { NexoraContext } from '../context.js';
 import { createOutboxEvent } from '../outbox.js';
+
+/** Dev-only convenience: with the mock provider, deliver the "callback" after
+ *  a short delay so the purchase→activation flow completes without a phone.
+ *  Guarded to the mock provider — never active for Daraja. Exported for the
+ *  guest purchase route to reuse. */
+export function scheduleMockAutoConfirm(
+  nexora: NexoraContext,
+  input: { paymentId: string; providerTransactionId: string; amountMinor: number },
+): void {
+  if (!(nexora.payments instanceof MockPaymentProvider)) return;
+  const delay = nexora.env.MOCK_PAYMENT_AUTO_CONFIRM_MS;
+  if (delay <= 0) return;
+  setTimeout(() => {
+    void (async (): Promise<void> => {
+      try {
+        const payment = await nexora.prisma.payment.findUnique({
+          where: { id: input.paymentId },
+          include: { package: { include: { policy: true } } },
+        });
+        if (payment === null || payment.status !== 'PENDING') return; // cancelled/failed meanwhile
+        await activateOnPaymentSuccess(nexora.prisma, {
+          payment,
+          receipt: `MOCKRCPT-${input.providerTransactionId.slice(-8).toUpperCase()}`,
+          correlationId: `mock-cb-${input.providerTransactionId}`,
+        });
+        nexora.metrics.paymentOutcome('confirmed');
+        nexora.logger.info('Mock payment auto-confirmed', { paymentId: input.paymentId });
+      } catch (error) {
+        nexora.logger.warn('Mock auto-confirm failed', {
+          paymentId: input.paymentId,
+          error: (error as Error).message,
+        });
+      }
+    })();
+  }, delay).unref();
+}
 
 const initiateSchema = z.object({
   packageId: z.string().uuid(),
@@ -132,6 +169,11 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
         data: { status: 'PENDING', providerTransactionId },
       });
       nexora.metrics.paymentOutcome('initiated');
+      scheduleMockAutoConfirm(nexora, {
+        paymentId: payment.id,
+        providerTransactionId,
+        amountMinor: pkg.priceMinor,
+      });
       await nexora.prisma.paymentAttempt.create({
         data: {
           paymentId: payment.id,

@@ -3,3 +3,4 @@ export * from './types.js';
 export * from './adapter.js';
 export * from './mock-adapter.js';
 export * from './mikrotik-adapter.js';
+export * from './tenda-adapter.js';

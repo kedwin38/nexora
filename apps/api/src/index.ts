@@ -27,6 +27,10 @@ import { registerPackageRoutes } from './routes/package.routes.js';
 import { registerPaymentRoutes } from './routes/payment.routes.js';
 import { registerWebhookRoutes } from './routes/webhook.routes.js';
 import { registerAdminRoutes } from './routes/admin.routes.js';
+import { registerAdminPackageRoutes } from './routes/admin-packages.routes.js';
+import { registerAdminUserRoutes } from './routes/admin-users.routes.js';
+import { registerAdminOpsRoutes } from './routes/admin-ops.routes.js';
+import { registerGuestRoutes } from './routes/guest.routes.js';
 import { prismaSessionStore } from './session-store.js';
 import type { NexoraContext } from './context.js';
 
@@ -109,26 +113,12 @@ async function main(): Promise<void> {
     bodyLimit: 1_048_576,
   });
 
-<<<<<<< HEAD
   await app.register(cors, { origin: env.CORS_ORIGIN });
   await app.register(rateLimit, {
     global: false,
     max: 300,
     timeWindow: '1 minute',
   });
-=======
-  // Root endpoint
-  app.get('/', async (_request, reply) => {
-    return await reply.status(200).send({
-      message: 'Nexora API is online',
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  await registerHealthRoutes(app, { serviceName: 'api', startupTime });
-  registerErrorHandler(app, logger);
->>>>>>> 9f78a20e0cc6046e6a3ba8e211432a934cbf0638
 
   // Correlation ID on every response + request access logging (hooks must be
   // registered before routes to apply to them).
@@ -155,6 +145,15 @@ async function main(): Promise<void> {
       .send(await metrics.registry.metrics());
   });
 
+  // Root endpoint
+  app.get('/', async (_request, reply) => {
+    return await reply.status(200).send({
+      message: 'Nexora API is online',
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   await registerHealthRoutes(app, { serviceName: 'api', startupTime });
   registerErrorHandler(app, logger);
   await registerAuthPlugin(app, nexora);
@@ -164,11 +163,15 @@ async function main(): Promise<void> {
   await registerPaymentRoutes(app, nexora);
   await registerWebhookRoutes(app, nexora);
   await registerAdminRoutes(app, nexora);
+  await registerAdminPackageRoutes(app, nexora);
+  await registerAdminUserRoutes(app, nexora);
+  await registerAdminOpsRoutes(app, nexora);
+  await registerGuestRoutes(app, nexora);
 
   // ---- Interim operator portal (Stage 7 replaces this with apps/web) ----
   const portalHtml = await loadPortalHtml();
   if (portalHtml !== null) {
-    const portalPaths = new Set(['/', '/auth/login', '/auth/customer', '/dashboard', '/packages', '/admin', '/admin/ops']);
+    const portalPaths = new Set(['/', '/auth/login', '/auth/customer', '/dashboard', '/packages', '/guest', '/admin', '/admin/ops']);
     app.get('*', async (request, reply) => {
       if (portalPaths.has(request.url.split('?')[0] ?? '')) {
         return await reply.type('text/html').send(portalHtml);

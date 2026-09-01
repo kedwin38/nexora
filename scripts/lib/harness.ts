@@ -50,6 +50,7 @@ export async function startStack(options?: { port?: number; pgPort?: number }): 
     SESSION_SECRET,
     SESSION_TTL_HOURS: '24',
     PAYMENT_PROVIDER: 'mock',
+    MOCK_PAYMENT_AUTO_CONFIRM_MS: '0', // harnesses deliver callbacks deterministically
     ROUTER_ADAPTER: 'mock',
     LOG_LEVEL: 'warn',
     ADMIN_EMAIL,

@@ -16,13 +16,31 @@ import {
   LogNotificationSender,
   runExpiryCycle,
   runFupEvaluationCycle,
+  runPaymentReconciliation,
 } from '@nexora/engines';
+import { MockPaymentProvider, MpesaDarajaProvider, type PaymentProvider } from '@nexora/payment-sdk';
+import { mpesaEnvSchema } from '@nexora/config';
 
 const OUTBOX_POLL_MS = 2_000;
 const JOB_POLL_MS = 3_000;
 const NOTIFY_POLL_MS = 5_000;
 const OUTBOX_BATCH = 50;
-const JOB_TYPES = ['subscription-expiry', 'fup-evaluation', 'session-cleanup'] as const;
+const JOB_TYPES = ['subscription-expiry', 'fup-evaluation', 'session-cleanup', 'payment-reconciliation'] as const;
+
+function buildPaymentProvider(): PaymentProvider {
+  if (process.env.PAYMENT_PROVIDER === 'mpesa') {
+    const env = parseEnv(mpesaEnvSchema);
+    return new MpesaDarajaProvider({
+      env: env.MPESA_ENV,
+      consumerKey: env.MPESA_CONSUMER_KEY,
+      consumerSecret: env.MPESA_CONSUMER_SECRET,
+      shortcode: env.MPESA_SHORTCODE,
+      passkey: env.MPESA_PASSKEY,
+      callbackUrl: env.MPESA_CALLBACK_URL,
+    });
+  }
+  return new MockPaymentProvider();
+}
 
 async function claimJob(prisma: PrismaClient): Promise<{ id: string; type: string } | null> {
   const job = await prisma.job.findFirst({
@@ -59,6 +77,11 @@ async function executeJob(prisma: PrismaClient, logger: Logger, job: { id: strin
           data: { status: 'ENDED', endedAt: new Date(), terminationReason: 'STALE_CLEANUP' },
         });
         result = `staleEnded=${stale.count}`;
+        break;
+      }
+      case 'payment-reconciliation': {
+        const summary = await runPaymentReconciliation(prisma, buildPaymentProvider());
+        result = `checked=${summary.checked} confirmed=${summary.confirmed} failed=${summary.failed} pending=${summary.stillPending} errors=${summary.providerErrors}`;
         break;
       }
       default:

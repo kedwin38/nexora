@@ -4,9 +4,14 @@
  * JSON in production, pretty-printed in development. Secrets are redacted at
  * the serializer level so no call site can leak them accidentally. Every log
  * line carries the service name and (when bound) a correlation ID.
+ *
+ * Pretty mode uses pino-pretty as a synchronous STREAM — never
+ * pino.transport(), which spawns a worker thread whose path resolution
+ * breaks inside esbuild bundles (dist/lib/worker.js MODULE_NOT_FOUND).
  */
 
 import { pino, type Logger as PinoLogger } from 'pino';
+import pretty from 'pino-pretty';
 
 export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
@@ -67,21 +72,16 @@ export function createLogger(options: {
   pretty?: boolean;
   bindings?: Record<string, unknown>;
 }): Logger {
-  const pretty = options.pretty ?? process.env.NODE_ENV === 'development';
-  const instance = pino({
+  const usePretty = options.pretty ?? process.env.NODE_ENV === 'development';
+  const base = {
     level: options.level,
     base: { service: options.service, ...options.bindings },
     redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
     timestamp: pino.stdTimeFunctions.isoTime,
-    ...(pretty
-      ? {
-          transport: {
-            target: 'pino-pretty',
-            options: { colorize: true, translateTime: 'SYS:HH:MM:ss.l', ignore: 'pid,hostname' },
-          },
-        }
-      : {}),
-  });
+  };
+  const instance = usePretty
+    ? pino(base, pretty({ colorize: true, translateTime: 'SYS:HH:MM:ss.l', ignore: 'pid,hostname' }))
+    : pino(base);
 
   return toLogger(instance);
 }

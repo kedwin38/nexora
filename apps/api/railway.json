@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm install && npm run db:generate && npm run build --workspace @nexora/api"
+  },
+  "deploy": {
+    "startCommand": "npm run start --workspace @nexora/api",
+    "preDeployCommand": "npm run migrate:deploy --workspace @nexora/db",
+    "healthcheckPath": "/health/live",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

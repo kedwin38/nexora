@@ -30,8 +30,23 @@ export const apiEnvSchema = databaseEnvSchema.merge(redisEnvSchema).extend({
   PORT: z.coerce.number().int().positive().default(5000),
   HOST: z.string().default('0.0.0.0'),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
+});
+
+/**
+ * M-Pesa provider configuration. Required by the payments module (Stage 3),
+ * deliberately NOT part of apiEnvSchema — the API must boot before payment
+ * credentials exist (see RAILWAY_SETUP.md).
+ */
+export const mpesaEnvSchema = z.object({
+  MPESA_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+  MPESA_CONSUMER_KEY: z.string().min(1),
+  MPESA_CONSUMER_SECRET: z.string().min(1),
+  MPESA_SHORTCODE: z.string().min(1),
+  MPESA_PASSKEY: z.string().min(1),
   MPESA_CALLBACK_URL: z.string().url(),
 });
+
+export type MpesaEnv = z.infer<typeof mpesaEnvSchema>;
 
 export type BaseEnv = z.infer<typeof baseEnvSchema>;
 export type DatabaseEnv = z.infer<typeof databaseEnvSchema>;

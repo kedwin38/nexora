@@ -45,7 +45,6 @@ describe('parseEnv', () => {
       DATABASE_URL: 'postgresql://u:p@h:5432/d',
       REDIS_URL: 'redis://localhost:6379',
       SESSION_SECRET: 'too-short',
-      MPESA_CALLBACK_URL: 'https://api.example.com/api/v1/webhooks/mpesa',
     });
     expect(result.success).toBe(false);
   });

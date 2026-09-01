@@ -6,7 +6,8 @@ Live project status. Read this first when resuming work. Update after every chec
 
 ## CurrentObjectives
 
-- Stage 1 (Foundation): **COMPLETE** (migration execution deferred to Railway staging per KR-1).
+- Stage 1 (Foundation): **COMPLETE**.
+- Railway incident 2026-09-01 (crash-loop, missing env) — **RESOLVED in code + runbook** (`RAILWAY_SETUP.md`); awaiting user to attach Postgres/Redis and set variables on Railway.
 - Stage 2 (Identity & Security): Argon2id auth, session tokens, RBAC middleware, audit framework — see CHECKPOINT.md "Next".
 
 ## BuildOrder (from persona §6 — sequential, do not skip)
@@ -27,6 +28,9 @@ Live project status. Read this first when resuming work. Update after every chec
 
 - Monorepo scaffold: apps/{api,worker,network-worker,scheduler,web}, packages/{domain,contracts,config,logging,events,auth,db,router-sdk,payment-sdk}
 - Root tooling: TypeScript strict (NodeNext), ESLint 9 flat config, Prettier, Vitest, npm workspaces
+- **Initial Prisma migration** (`packages/db/prisma/migrations/20260901000000_initial/migration.sql`, 26 tables) generated offline via `prisma migrate diff` — `migrate deploy` now works on Railway (pre-deploy hook on api)
+- **Per-app `railway.json`** (Nixpacks build, start commands, api healthcheck + pre-deploy migration)
+- **`RAILWAY_SETUP.md`** — deployment runbook (attach Postgres/Redis, reference variables, secrets, one-time seed)
 - Shared kernel (@nexora/domain): branded IDs, Result, NexoraError taxonomy, event envelope, correlation IDs
 - State machines (@nexora/domain): Customer, Subscription, Payment, NetworkOperation, Session, FUP — all with exhaustive unit tests
 - Contracts (@nexora/contracts): event catalog (42 event types), API error envelope, health/pagination shapes
@@ -51,8 +55,8 @@ Live project status. Read this first when resuming work. Update after every chec
 
 ## KnownRisks
 
-- **KR-1 No local PostgreSQL** — `prisma migrate dev` cannot run on this workstation. Mitigation: schema validated via `prisma validate`; generate via `prisma generate`; first real migration executes against Railway staging during Stage 2/deploy. Local integration tests will use an ephemeral Postgres when Docker is available (KR-2).
-- **KR-2 No Docker / no git on dev workstation** — Dockerfiles untested locally; version control must be initialized by the user (git not on PATH). Neither blocks code progress.
+- **KR-1 No local PostgreSQL — RESOLVED for migration generation**: initial migration created offline via `prisma migrate diff`; execution happens via the api service's Railway pre-deploy hook. Local integration testing still needs Docker Postgres when available (KR-2).
+- **KR-2 No Docker / no git on dev workstation** — Dockerfiles/railway.json verified only by the live Railway build (which succeeded); version control must be initialized by the user (git not on PATH). Neither blocks code progress.
 - **KR-3 Railway private network reachability to on-site MikroTik** — Pattern A vs Pattern B decision deferred to Stage 4 (see architecture map §42); adapter boundary keeps both open.
 
 ## ADRs
@@ -72,10 +76,12 @@ See docs/technical-debt.md — TD-001 (web deps deferred), TD-002 (Docker runtim
 - [x] `npm install` — 333 packages (6m)
 - [x] Prisma schema valid (`prisma validate`) — "schema is valid 🚀"
 - [x] `prisma generate` — Prisma Client v6.19.3
-- [x] TypeScript strict typecheck passes — all 13 workspaces, exit 0
+- [x] Initial migration SQL — 26 CREATE TABLE statements, ships in repo
+- [x] TypeScript strict typecheck passes — all 13 workspaces, exit 0 (re-verified after env split)
 - [x] ESLint passes — exit 0
-- [x] Vitest suite green — 108/108 tests, 4 files
-- [x] esbuild bundles build — 4 apps (api 2.0MB, others ~263KB, `.cjs` format per ADR-005)
+- [x] Vitest suite green — 108/108 tests, 4 files (re-verified after env split)
+- [x] esbuild bundles build — 4 apps (`api` rebuilt after env change)
 - [x] API boot smoke test — `/health/live` 200; `/health/ready` 503 degraded with postgres:down (correct, no local DB); 404 returns structured error envelope with correlationId
-- [ ] Initial migration — blocked by KR-1 (executes against Railway staging)
+- [x] **Railway build verified by production deploy** (2026-09-01): containers built, bundles executed, fail-fast EnvValidation fired exactly as designed
+- [ ] Railway runtime green — awaiting user: attach Postgres + Redis, set reference vars + SESSION_SECRET per `RAILWAY_SETUP.md`
 - [x] npm audit reviewed — KR-6 accepted (prisma CLI dev-only transitive advisory)

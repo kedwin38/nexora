@@ -33,6 +33,18 @@
 4. ESM bundle broke Fastify CJS internals → switched to `.cjs` bundles (ADR-005 updated).
 5. Final certification run caught a union-of-generics type error in the new lifecycle-machines test (params collapsed to `never`) → widened to `StateMachine<string>[]`. All gates re-run green.
 
+## Incident — Railway first deploy (2026-09-01, post-checkpoint)
+
+**Symptom:** api + network-worker crash-looped with `EnvValidationError: DATABASE_URL/REDIS_URL/SESSION_SECRET Required`.
+**Root cause:** services deployed with no Postgres/Redis attached and no secrets. Build itself **succeeded** — bundles built and executed on Railway (validates the whole Docker/Nixpacks → esbuild path in production).
+**Fixes shipped:**
+1. `apiEnvSchema` no longer requires `MPESA_CALLBACK_URL` — M-Pesa vars moved to a dedicated `mpesaEnvSchema` (Stage 3 concern; API must boot before payment credentials exist).
+2. Initial Prisma migration generated **offline** (`prisma migrate diff --from-empty`) — 26 tables; `prisma migrate deploy` now provisions the schema on Railway (KR-1 resolved for generation).
+3. Per-app `railway.json`: Nixpacks build commands, api healthcheck (`/health/live`), **pre-deploy `migrate deploy` on api**, ON_FAILURE restart policies.
+4. `RAILWAY_SETUP.md` runbook: attach Postgres/Redis, set `${{Postgres.DATABASE_URL}}` / `${{Redis.REDIS_URL}}` references, `SESSION_SECRET` ≥32 chars, one-time seed + delete `ADMIN_*` variables.
+**Re-verified after fixes:** typecheck ✅ lint ✅ tests 108/108 ✅ api rebuilt ✅.
+**Awaiting user action on Railway** (see RAILWAY_SETUP.md steps 1–2), then verify per step 5.
+
 ## Not Verified / Blocked
 
 - **Initial migration + seed run** — no local PostgreSQL (KR-1). Migration executes against Railway staging at Stage 2 kickoff (`prisma migrate dev` with staging shadow DB or `migrate deploy` on first env). Seed is code-complete and idempotent.

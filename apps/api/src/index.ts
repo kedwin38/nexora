@@ -24,6 +24,15 @@ async function main(): Promise<void> {
     trustProxy: true,
   });
 
+  // Root endpoint
+  app.get('/', async (_request, reply) => {
+    return await reply.status(200).send({
+      message: 'Nexora API is online',
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   await registerHealthRoutes(app, { serviceName: 'api', startupTime });
   registerErrorHandler(app, logger);
 

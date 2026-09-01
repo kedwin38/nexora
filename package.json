@@ -1,0 +1,43 @@
+{
+  "name": "nexora",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NEXORA ISP OS — policy-driven ISP operating system (Railway-first)",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write \"apps/*/src/**/*.ts\" \"packages/*/src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "db:generate": "npm run generate -w @nexora/db",
+    "db:validate": "npm run validate -w @nexora/db",
+    "db:migrate": "npm run migrate -w @nexora/db",
+    "db:migrate:deploy": "npm run migrate:deploy -w @nexora/db",
+    "db:studio": "npm run studio -w @nexora/db",
+    "dev:api": "npm run dev -w @nexora/api",
+    "dev:worker": "npm run dev -w @nexora/worker",
+    "dev:network-worker": "npm run dev -w @nexora/network-worker",
+    "dev:scheduler": "npm run dev -w @nexora/scheduler"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^3.0.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^3.0.0"
+  }
+}

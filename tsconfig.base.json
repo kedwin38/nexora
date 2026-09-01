@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@nexora/domain": ["packages/domain/src/index.ts"],
+      "@nexora/contracts": ["packages/contracts/src/index.ts"],
+      "@nexora/config": ["packages/config/src/index.ts"],
+      "@nexora/logging": ["packages/logging/src/index.ts"],
+      "@nexora/events": ["packages/events/src/index.ts"],
+      "@nexora/auth": ["packages/auth/src/index.ts"],
+      "@nexora/db": ["packages/db/src/index.ts"],
+      "@nexora/router-sdk": ["packages/router-sdk/src/index.ts"],
+      "@nexora/payment-sdk": ["packages/payment-sdk/src/index.ts"]
+    }
+  }
+}

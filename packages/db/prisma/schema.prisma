@@ -1,0 +1,732 @@
+// NEXORA ISP OS — Prisma schema (Stage 1 baseline)
+// PostgreSQL is the system of record (architecture map §31, invariant #1).
+// Money is stored as integer minor units; byte counters as BigInt (ADR-007).
+// tenantId fields prepare future multi-tenancy (§91) and default to 'default'.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// ENUMS
+// ===========================================================================
+
+enum AccountType {
+  REGISTERED
+  GUEST
+}
+
+enum CustomerStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  DELETED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  NETWORK_ADMIN
+  BILLING_ADMIN
+  SUPPORT_AGENT
+  ANALYST
+  READ_ONLY
+  CUSTOMER
+}
+
+enum AdminUserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum PackageStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum FupResetPolicy {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+  PERIOD
+}
+
+enum SubscriptionStatus {
+  PENDING
+  PROVISIONING
+  ACTIVE
+  FUP
+  SUSPENDED
+  EXPIRED
+  CANCELLED
+  PROVISIONING_FAILED
+}
+
+enum PaymentProvider {
+  MPESA
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REVERSED
+  REFUNDED
+}
+
+enum PaymentAttemptType {
+  STK_PUSH
+  STATUS_QUERY
+  REVERSAL
+  CALLBACK
+}
+
+enum PaymentAllocation {
+  SUBSCRIPTION_PURCHASE
+  SUBSCRIPTION_RENEWAL
+}
+
+enum RouterVendor {
+  MIKROTIK
+  TENDA
+}
+
+enum RouterStatus {
+  ONLINE
+  DEGRADED
+  OFFLINE
+  MAINTENANCE
+  UNKNOWN
+}
+
+enum RouterCapabilityEnum {
+  CAP_AUTH
+  CAP_DEAUTH
+  CAP_RATE_LIMIT
+  CAP_SESSION_CONTROL
+  CAP_USAGE
+  CAP_HEALTH
+  CAP_CLIENT_DISCOVERY
+  CAP_POLICY_READBACK
+}
+
+enum NetworkOperationType {
+  AUTHORIZE
+  DEAUTHORIZE
+  APPLY_POLICY
+  REMOVE_POLICY
+  DISCONNECT_SESSION
+  RECONCILE_SYNC
+}
+
+enum NetworkOperationStatus {
+  QUEUED
+  PROCESSING
+  VERIFYING
+  SUCCESS
+  RETRYING
+  PERMANENT_FAILURE
+}
+
+enum SessionStatus {
+  CREATED
+  AUTHENTICATING
+  AUTHORIZED
+  ONLINE
+  THROTTLED
+  DISCONNECTING
+  ENDED
+  FAILED
+}
+
+enum FupStateEnum {
+  NORMAL
+  WARNING
+  FUP_REACHED
+  THROTTLED
+}
+
+enum OutboxStatus {
+  PENDING
+  DISPATCHED
+  FAILED
+  DEAD
+}
+
+enum SystemEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  RETRYING
+  CANCELLED
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+  DASHBOARD
+  PUSH
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum AuditResult {
+  SUCCESS
+  FAILURE
+}
+
+// ===========================================================================
+// IDENTITY & RBAC (admin/staff plane)
+// ===========================================================================
+
+model Permission {
+  id        String   @id @default(uuid())
+  key       String   @unique // e.g. "payment.refund"
+  createdAt DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        AdminRole @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  permissions RolePermission[]
+  users       User[]
+}
+
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  displayName   String
+  status        AdminUserStatus @default(ACTIVE)
+  roleId        String
+  role          Role           @relation(fields: [roleId], references: [id])
+  mfaEnabled    Boolean        @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  sessions  UserSession[]
+  auditLogs AuditLog[]
+
+  @@index([status])
+}
+
+model UserSession {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  ip         String?
+  userAgent  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+// ===========================================================================
+// CUSTOMER / GUEST / DEVICE
+// ===========================================================================
+
+model Customer {
+  id             String         @id @default(uuid())
+  customerNumber String         @unique
+  tenantId       String         @default("default")
+  accountType    AccountType    @default(REGISTERED)
+  status         CustomerStatus @default(PENDING)
+  phoneNumber    String?
+  email          String?
+  passwordHash   String? // null for guests
+  displayName    String?
+  metadata       Json?
+  lastLoginAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  devices       Device[]
+  guestAccess   GuestAccess?
+  payments      Payment[]
+  subscriptions Subscription[]
+  sessions      CustomerSession[]
+  notifications Notification[]
+  // NOTE: audits referencing customers are queried via AuditLog.resourceType/resourceId
+  // (polymorphic actor, see TD-003) — no direct relation by design.
+
+  @@unique([tenantId, phoneNumber])
+  @@index([status])
+  @@index([accountType])
+  @@index([tenantId])
+}
+
+model Device {
+  id          String   @id @default(uuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  macAddress  String
+  ipAddress   String?
+  hostname    String?
+  vendor      String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  metadata    Json?
+
+  sessions CustomerSession[]
+
+  @@unique([customerId, macAddress])
+  @@index([macAddress])
+}
+
+model GuestAccess {
+  id         String   @id @default(uuid())
+  customerId String   @unique
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  accessCode String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// ===========================================================================
+// PACKAGES & POLICIES
+// ===========================================================================
+
+model Package {
+  id           String        @id @default(uuid())
+  tenantId     String        @default("default")
+  name         String
+  description  String?
+  currency     String        @default("KES")
+  priceMinor   Int
+  durationSeconds Int
+  version      Int           @default(1)
+  status       PackageStatus @default(DRAFT)
+  maxDevices   Int           @default(1)
+  displayOrder Int           @default(0)
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  policy        PackagePolicy?
+  subscriptions Subscription[]
+
+  @@unique([tenantId, name, version])
+  @@index([status, displayOrder])
+}
+
+/// Network policy template bound to a package version. Snapshotted onto the
+/// subscription at activation; later edits never rewrite history (§111-112).
+model PackagePolicy {
+  id                    String         @id @default(uuid())
+  packageId             String         @unique
+  package               Package        @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  downloadKbps          Int
+  uploadKbps            Int
+  burstDownloadKbps     Int?
+  burstUploadKbps       Int?
+  fupLimitBytes         BigInt?
+  fupWarningPercent     Int            @default(80)
+  fupThrottleDownloadKbps Int?
+  fupThrottleUploadKbps   Int?
+  fupResetPolicy        FupResetPolicy @default(NONE)
+  sessionTimeLimitSeconds Int?
+  activeHoursStart      String? // "HH:MM"
+  activeHoursEnd        String? // "HH:MM"
+  metadata              Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ===========================================================================
+// SUBSCRIPTIONS & FUP
+// ===========================================================================
+
+model Subscription {
+  id              String             @id @default(uuid())
+  subscriptionNumber String          @unique
+  tenantId        String             @default("default")
+  customerId      String
+  customer        Customer           @relation(fields: [customerId], references: [id])
+  packageId       String
+  package         Package            @relation(fields: [packageId], references: [id])
+  packageVersion  Int
+  status          SubscriptionStatus @default(PENDING)
+  startTime       DateTime?
+  expiryTime      DateTime?
+  billingPeriodStart DateTime?
+  billingPeriodEnd   DateTime?
+  priceAtPurchaseMinor Int
+  fupThresholdAtPurchaseBytes BigInt?
+  policySnapshot  Json // immutable copy of the effective policy at activation
+  paymentReference String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  fupStates          FupState[]
+  networkPolicy      NetworkPolicy?
+  networkOperations  NetworkOperation[]
+  sessions           CustomerSession[]
+  payments           Payment[]
+
+  @@index([customerId, status])
+  @@index([status, expiryTime])
+}
+
+model FupState {
+  id              String       @id @default(uuid())
+  subscriptionId  String
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  state           FupStateEnum @default(NORMAL)
+  usedBytes       BigInt       @default(0)
+  limitBytes      BigInt
+  warningPercent  Int          @default(80)
+  periodStart     DateTime     @default(now())
+  periodEnd       DateTime
+  lastEvaluatedAt DateTime?
+  resetAt         DateTime?
+
+  @@unique([subscriptionId, periodStart])
+  @@index([state])
+  @@index([periodEnd])
+}
+
+// ===========================================================================
+// PAYMENTS
+// ===========================================================================
+
+model Payment {
+  id                   String          @id @default(uuid())
+  provider             PaymentProvider @default(MPESA)
+  providerTransactionId String? // CheckoutRequestID — UNIQUE per provider when present
+  clientReference      String? // application idempotency key
+  customerId           String
+  customer             Customer        @relation(fields: [customerId], references: [id])
+  subscriptionId       String?
+  subscription         Subscription?   @relation(fields: [subscriptionId], references: [id])
+  packageId            String?
+  allocation           PaymentAllocation?
+  amountMinor          Int
+  currency             String          @default("KES")
+  status               PaymentStatus   @default(INITIATED)
+  phoneNumber          String
+  receipt              String?
+  failureReason        String?
+  initiatedAt          DateTime        @default(now())
+  completedAt          DateTime?
+  reversedAt           DateTime?
+  refundedAt           DateTime?
+  correlationId        String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  attempts PaymentAttempt[]
+
+  @@unique([provider, providerTransactionId])
+  @@unique([provider, clientReference])
+  @@index([customerId, status])
+  @@index([status, createdAt])
+}
+
+model PaymentAttempt {
+  id             String             @id @default(uuid())
+  paymentId      String
+  payment        Payment            @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  attemptType    PaymentAttemptType
+  requestPayload Json?
+  responsePayload Json?
+  resultCode     String?
+  resultDesc     String?
+  createdAt      DateTime           @default(now())
+
+  @@index([paymentId, createdAt])
+}
+
+// ===========================================================================
+// ROUTERS & NETWORK CONTROL
+// ===========================================================================
+
+model Router {
+  id             String       @id @default(uuid())
+  tenantId       String       @default("default")
+  name           String
+  vendor         RouterVendor
+  host           String
+  port           Int          @default(8728)
+  username       String
+  /// Railway variable NAME holding the password. Plaintext never stored (ADR-008).
+  passwordEnvVar String
+  timeoutMs      Int          @default(10000)
+  status         RouterStatus @default(UNKNOWN)
+  site           String?
+  lastSeenAt     DateTime?
+  healthPayload  Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  capabilities      RouterCapabilityEntry[]
+  networkOperations NetworkOperation[]
+  sessions          CustomerSession[]
+
+  @@unique([tenantId, host, port])
+  @@index([status])
+}
+
+model RouterCapabilityEntry {
+  id         String               @id @default(uuid())
+  routerId   String
+  router     Router               @relation(fields: [routerId], references: [id], onDelete: Cascade)
+  capability RouterCapabilityEnum
+  supported  Boolean              @default(true)
+
+  @@unique([routerId, capability])
+}
+
+/// Desired network state per subscription, in canonical form, with a version
+/// for idempotent, version-aware network commands (§20, §74).
+model NetworkPolicy {
+  id             String   @id @default(uuid())
+  subscriptionId String   @unique
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  desiredState   Json // CanonicalSubscriberState
+  version        Int      @default(1)
+  synchronizedAt DateTime?
+  updatedAt      DateTime @updatedAt
+
+  @@index([synchronizedAt])
+}
+
+model NetworkOperation {
+  id                  String                @id @default(uuid())
+  routerId            String
+  router              Router                @relation(fields: [routerId], references: [id])
+  customerId          String?
+  subscriptionId      String?
+  subscription        Subscription?         @relation(fields: [subscriptionId], references: [id])
+  operationType       NetworkOperationType
+  desiredState        Json?
+  desiredStateVersion Int?
+  status              NetworkOperationStatus @default(QUEUED)
+  attempts            Int                   @default(0)
+  maxAttempts         Int                   @default(5)
+  lastError           String?
+  correlationId       String?
+  idempotencyKey      String                @unique
+  nextAttemptAt       DateTime              @default(now())
+  createdAt           DateTime              @default(now())
+  startedAt           DateTime?
+  completedAt         DateTime?
+  verificationResult  Json?
+
+  @@index([status, nextAttemptAt])
+  @@index([routerId, status])
+  @@index([subscriptionId])
+}
+
+// ===========================================================================
+// SESSIONS & USAGE
+// ===========================================================================
+
+model CustomerSession {
+  id              String        @id @default(uuid())
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  subscriptionId  String
+  subscription    Subscription  @relation(fields: [subscriptionId], references: [id])
+  routerId        String?
+  router          Router?       @relation(fields: [routerId], references: [id])
+  deviceId        String?
+  device          Device?       @relation(fields: [deviceId], references: [id])
+  macAddress      String
+  ipAddress       String?
+  status          SessionStatus @default(CREATED)
+  downloadBytes   BigInt        @default(0)
+  uploadBytes     BigInt        @default(0)
+  terminationReason String?
+  startedAt       DateTime      @default(now())
+  lastSeenAt      DateTime      @default(now())
+  endedAt         DateTime?
+
+  usageRecords UsageRecord[]
+
+  @@index([customerId, startedAt])
+  @@index([macAddress, startedAt])
+  @@index([status, lastSeenAt])
+}
+
+model UsageSnapshot {
+  id             String   @id @default(uuid())
+  routerId       String
+  sessionId      String?
+  macAddress     String
+  counterDownload BigInt
+  counterUpload  BigInt
+  counterResetSuspected Boolean @default(false)
+  raw            Json?
+  collectedAt    DateTime @default(now())
+
+  @@index([routerId, collectedAt])
+  @@index([macAddress, collectedAt])
+}
+
+model UsageRecord {
+  id            String           @id @default(uuid())
+  sessionId     String?
+  session       CustomerSession? @relation(fields: [sessionId], references: [id])
+  subscriptionId String
+  customerId    String
+  intervalStart DateTime
+  intervalEnd   DateTime
+  downloadBytes BigInt           @default(0)
+  uploadBytes   BigInt           @default(0)
+  source        String           @default("ROUTER")
+  createdAt     DateTime         @default(now())
+
+  @@index([subscriptionId, intervalStart])
+  @@index([customerId, intervalStart])
+}
+
+// ===========================================================================
+// EVENTING (outbox + event log), JOBS, AUDIT, NOTIFICATIONS
+// ===========================================================================
+
+model OutboxEvent {
+  id             String       @id @default(uuid())
+  eventType      String
+  aggregateType  String
+  aggregateId    String
+  payload        Json
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  maxAttempts    Int          @default(5)
+  nextAttemptAt  DateTime     @default(now())
+  lastError      String?
+  correlationId  String
+  causationId    String?
+  createdAt      DateTime     @default(now())
+  dispatchedAt   DateTime?
+  processedAt    DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@index([aggregateType, aggregateId])
+  @@index([correlationId])
+}
+
+model SystemEvent {
+  id            String            @id @default(uuid())
+  eventType     String
+  aggregateType String
+  aggregateId   String
+  payload       Json
+  status        SystemEventStatus @default(RECEIVED)
+  correlationId String
+  causationId   String?
+  error         String?
+  createdAt     DateTime          @default(now())
+  processedAt   DateTime?
+
+  @@index([eventType, createdAt])
+  @@index([correlationId])
+}
+
+model Job {
+  id            String     @id @default(uuid())
+  type          String
+  priority      Int        @default(0)
+  status        JobStatus  @default(QUEUED)
+  payload       Json
+  attempts      Int        @default(0)
+  maxAttempts   Int        @default(3)
+  runAfter      DateTime   @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  lastError     String?
+  correlationId String?
+  workerId      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([status, runAfter])
+  @@index([type, status])
+}
+
+/// Append-only. Never updated or deleted (invariant #8; §57).
+/// actorType distinguishes USER | CUSTOMER | SYSTEM | WORKER actors;
+/// actorId references User for USER actors, Customer for CUSTOMER actors,
+/// and is null for system/worker actors (polymorphic, deliberately unenforced by FK).
+model AuditLog {
+  id             String      @id @default(uuid())
+  actorId        String?
+  actorType      String // USER | CUSTOMER | SYSTEM | WORKER
+  user           User?       @relation(fields: [actorId], references: [id])
+  action         String // e.g. "SESSION_DISCONNECTED"
+  resourceType   String
+  resourceId     String
+  beforeState    Json?
+  afterState     Json?
+  result         AuditResult @default(SUCCESS)
+  ipAddress      String?
+  correlationId  String?
+  createdAt      DateTime    @default(now())
+
+  @@index([resourceType, resourceId, createdAt])
+  @@index([actorType, actorId])
+  @@index([correlationId])
+}
+
+model Notification {
+  id          String             @id @default(uuid())
+  customerId  String?
+  customer    Customer?          @relation(fields: [customerId], references: [id])
+  triggerType String // e.g. PAYMENT_CONFIRMED
+  channel     NotificationChannel
+  subject     String
+  body        String
+  status      NotificationStatus @default(PENDING)
+  attempts    Int                @default(0)
+  scheduledFor DateTime           @default(now())
+  sentAt      DateTime?
+  failedAt    DateTime?
+  error       String?
+  metadata    Json?
+  createdAt   DateTime           @default(now())
+
+  @@index([status, scheduledFor])
+  @@index([customerId, createdAt])
+}

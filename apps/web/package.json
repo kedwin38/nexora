@@ -1,0 +1,6 @@
+{
+  "name": "@nexora/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NEXORA web frontends — customer portal, guest portal, admin command center. Implemented in Stage 7 (Next.js); dependency installation intentionally deferred to keep the Stage 1 toolchain light."
+}

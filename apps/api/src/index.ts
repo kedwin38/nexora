@@ -171,9 +171,18 @@ async function main(): Promise<void> {
   // ---- Interim operator portal (Stage 7 replaces this with apps/web) ----
   const portalHtml = await loadPortalHtml();
   if (portalHtml !== null) {
-    const portalPaths = new Set(['/', '/auth/login', '/auth/customer', '/dashboard', '/packages', '/guest', '/admin', '/admin/ops']);
+    const portalPaths = new Set(['/', '/auth/login', '/auth/customer', '/dashboard', '/packages', '/guest', '/admin', '/admin/ops', '/icon.svg']);
     app.get('*', async (request, reply) => {
-      if (portalPaths.has(request.url.split('?')[0] ?? '')) {
+      const urlPath = request.url.split('?')[0] ?? '';
+      if (urlPath === '/icon.svg') {
+        try {
+          const icon = await readFile(join(process.cwd(), 'apps', 'api', 'public', 'icon.svg'));
+          return await reply.type('image/svg+xml').send(icon);
+        } catch {
+          return await reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Not found.', correlationId: request.id, retryable: false } });
+        }
+      }
+      if (portalPaths.has(urlPath)) {
         return await reply.type('text/html').send(portalHtml);
       }
       return await reply.status(404).send({

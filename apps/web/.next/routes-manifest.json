@@ -57,6 +57,12 @@
       "namedRegex": "^/dashboard(?:/)?$"
     },
     {
+      "page": "/icon.svg",
+      "regex": "^/icon\\.svg(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/icon\\.svg(?:/)?$"
+    },
+    {
       "page": "/packages",
       "regex": "^/packages(?:/)?$",
       "routeKeys": {},

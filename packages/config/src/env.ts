@@ -58,12 +58,27 @@ export interface EnvParseError {
   readonly message: string;
 }
 
+/** Platform-specific remediation hints surfaced in boot errors. */
+const REMEDIATION_HINTS: Record<string, string> = {
+  DATABASE_URL:
+    'Create a PostgreSQL service in the Railway project, then set DATABASE_URL = ${{Postgres.DATABASE_URL}} on THIS service.',
+  REDIS_URL:
+    'Create a Redis service in the Railway project, then set REDIS_URL = ${{Redis.REDIS_URL}} on THIS service.',
+  SESSION_SECRET: 'Set SESSION_SECRET to a random string of at least 32 characters (e.g. `openssl rand -hex 32`).',
+};
+
 export class EnvValidationError extends Error {
   public readonly issues: readonly EnvParseError[];
 
   constructor(issues: readonly EnvParseError[]) {
+    const remediation = issues
+      .map((issue) => REMEDIATION_HINTS[issue.key])
+      .filter((hint): hint is string => hint !== undefined);
+    const uniqueHints = [...new Set(remediation)];
     super(
-      `Invalid environment configuration:\n${issues.map((i) => `  - ${i.key}: ${i.message}`).join('\n')}`,
+      `Invalid environment configuration:\n${issues.map((i) => `  - ${i.key}: ${i.message}`).join('\n')}` +
+        (uniqueHints.length > 0 ? `\nRemediation:\n${uniqueHints.map((h) => `  > ${h}`).join('\n')}` : '') +
+        `\nSee RAILWAY_SETUP.md for the full deployment runbook.`,
     );
     this.name = 'EnvValidationError';
     this.issues = issues;

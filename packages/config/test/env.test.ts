@@ -39,6 +39,19 @@ describe('parseEnv', () => {
     }
   });
 
+  it('boot error includes platform remediation hints', () => {
+    try {
+      parseEnv(apiEnvSchema, { ...validBase });
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      const message = (error as EnvValidationError).message;
+      expect(message).toContain('${{Postgres.DATABASE_URL}}');
+      expect(message).toContain('${{Redis.REDIS_URL}}');
+      expect(message).toContain('openssl rand -hex 32');
+      expect(message).toContain('RAILWAY_SETUP.md');
+    }
+  });
+
   it('rejects a short SESSION_SECRET', () => {
     const result = apiEnvSchema.safeParse({
       ...validBase,

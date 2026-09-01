@@ -1,0 +1,20 @@
+1:"$Sreact.fragment"
+2:I[9664,["664","static/chunks/664-6d821dc1aacb6b48.js","177","static/chunks/app/layout-6983f1047f77ecd9.js"],""]
+3:I[5341,[],""]
+4:I[25,[],""]
+5:I[1012,[],"ClientPageRoot"]
+6:I[4655,["664","static/chunks/664-6d821dc1aacb6b48.js","105","static/chunks/app/dashboard/page-a786aff2c4e15cda.js"],"default"]
+9:I[5104,[],"OutletBoundary"]
+b:I[7158,[],"AsyncMetadataOutlet"]
+d:I[5104,[],"ViewportBoundary"]
+f:I[5104,[],"MetadataBoundary"]
+10:"$Sreact.suspense"
+12:I[4431,[],""]
+:HL["/_next/static/css/33eee86a4fa84aa8.css","style"]
+0:{"P":null,"b":"qzWQ0MMnqy7vMcvNoJgi1","p":"","c":["","dashboard"],"i":false,"f":[[["",{"children":["dashboard",{"children":["__PAGE__",{}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/33eee86a4fa84aa8.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"en","children":["$","body",null,{"children":[["$","header",null,{"children":[["$","div",null,{"className":"brand","children":["NEXORA ",["$","small",null,{"children":"// ISP OS"}]]}],["$","nav",null,{"children":[["$","$L2",null,{"href":"/dashboard","children":"Dashboard"}],["$","$L2",null,{"href":"/packages","children":"Packages"}],["$","$L2",null,{"href":"/admin","children":"Admin"}]]}]]}],["$","$L3",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L4",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]],"forbidden":"$undefined","unauthorized":"$undefined"}],["$","footer",null,{"children":"NEXORA ISP OS // CONTROL PLANE // PHASE 1"}]]}]}]]}],{"children":["dashboard",["$","$1","c",{"children":[null,["$","$L3",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L4",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":["__PAGE__",["$","$1","c",{"children":[["$","$L5",null,{"Component":"$6","searchParams":{},"params":{},"promises":["$@7","$@8"]}],null,["$","$L9",null,{"children":["$La",["$","$Lb",null,{"promise":"$@c"}]]}]]}],{},null,false]},null,false]},null,false],["$","$1","h",{"children":[null,[["$","$Ld",null,{"children":"$Le"}],null],["$","$Lf",null,{"children":["$","div",null,{"hidden":true,"children":["$","$10",null,{"fallback":null,"children":"$L11"}]}]}]]}],false]],"m":"$undefined","G":["$12",[]],"s":false,"S":true}
+7:{}
+8:"$0:f:0:1:2:children:2:children:1:props:children:0:props:params"
+e:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+a:null
+c:{"metadata":[["$","title","0",{"children":"NEXORA // ISP OS"}],["$","meta","1",{"name":"description","content":"NEXORA ISP Operating System — control plane"}]],"error":null,"digest":"$undefined"}
+11:"$c:metadata"

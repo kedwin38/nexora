@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nexora/domain": "*"
+    "@nexora/domain": "*",
+    "node-routeros": "^1.6.9",
+    "source-map-support": "^0.5.21"
   }
 }

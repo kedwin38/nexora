@@ -7,15 +7,23 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/index.ts",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/index.cjs --external:@prisma/client --external:.prisma",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/index.cjs --external:@prisma/client --external:.prisma --external:@node-rs/argon2",
     "start": "node dist/index.cjs"
   },
   "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/rate-limit": "^10.2.1",
+    "@nexora/auth": "*",
     "@nexora/config": "*",
     "@nexora/contracts": "*",
     "@nexora/db": "*",
     "@nexora/domain": "*",
+    "@nexora/engines": "*",
     "@nexora/logging": "*",
-    "fastify": "^5.2.1"
+    "@nexora/payment-sdk": "*",
+    "@nexora/router-sdk": "*",
+    "fastify": "^5.2.1",
+    "prom-client": "^15.1.3",
+    "zod": "^3.24.1"
   }
 }

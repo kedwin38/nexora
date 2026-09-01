@@ -345,6 +345,7 @@ model Package {
 
   policy        PackagePolicy?
   subscriptions Subscription[]
+  purchasePayments Payment[]
 
   @@unique([tenantId, name, version])
   @@index([status, displayOrder])
@@ -441,6 +442,7 @@ model Payment {
   subscriptionId       String?
   subscription         Subscription?   @relation(fields: [subscriptionId], references: [id])
   packageId            String?
+  package              Package?        @relation(fields: [packageId], references: [id])
   allocation           PaymentAllocation?
   amountMinor          Int
   currency             String          @default("KES")
@@ -677,6 +679,7 @@ model Job {
   startedAt     DateTime?
   completedAt   DateTime?
   lastError     String?
+  result        String?
   correlationId String?
   workerId      String?
   createdAt     DateTime   @default(now())

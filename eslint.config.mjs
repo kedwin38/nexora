@@ -12,6 +12,8 @@ export default tseslint.config(
       '**/*.mjs',
       '**/*.cjs',
       'packages/db/src/generated/**',
+      // Next.js app: linted by its own build (next lint rules), not the root config.
+      'apps/web/**',
     ],
   },
   eslint.configs.recommended,
@@ -28,8 +30,8 @@ export default tseslint.config(
     },
   },
   {
-    // CLI scripts (seed) print their results to the operator via console.
-    files: ['packages/db/prisma/**/*.ts'],
+    // CLI scripts (seed, e2e harness) print their results via console.
+    files: ['packages/db/prisma/**/*.ts', 'scripts/**/*.ts'],
     rules: {
       'no-console': 'off',
     },

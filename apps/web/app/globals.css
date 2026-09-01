@@ -1,0 +1,49 @@
+:root {
+  --bg: #06080d; --panel: #0b0f17; --panel2: #0e1420; --line: #1a2332;
+  --txt: #d7e0ee; --dim: #6b7a90; --acc: #38e1c4; --warn: #f5c451; --crit: #f26d6d;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  --sans: "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--txt); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+a { color: var(--acc); text-decoration: none; }
+.mono { font-family: var(--mono); }
+header { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 10; }
+header .brand { font-family: var(--mono); letter-spacing: 3px; font-size: 16px; color: var(--acc); }
+header .brand small { color: var(--dim); letter-spacing: 1px; }
+nav a { margin-left: 18px; font-family: var(--mono); font-size: 12px; color: var(--dim); text-transform: uppercase; }
+nav a:hover { color: var(--acc); }
+main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+h1 { font-size: 20px; margin-bottom: 4px; letter-spacing: 1px; }
+.sub { color: var(--dim); font-size: 12px; font-family: var(--mono); margin-bottom: 24px; }
+.grid { display: grid; gap: 14px; }
+.c4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.c2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+.card .k { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-family: var(--mono); }
+.card .v { font-family: var(--mono); font-size: 22px; margin-top: 6px; }
+.v.ok { color: var(--acc); } .v.warn { color: var(--warn); } .v.crit { color: var(--crit); }
+table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+th { text-align: left; color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; padding: 8px; border-bottom: 1px solid var(--line); }
+td { padding: 8px; border-bottom: 1px solid var(--line); }
+tr:hover td { background: var(--panel2); }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; letter-spacing: 1px; font-family: var(--mono); }
+.pill.SUCCESS, .pill.ACTIVE, .pill.ONLINE, .pill.SENT, .pill.ok { background: rgba(56,225,196,.12); color: var(--acc); border: 1px solid rgba(56,225,196,.4); }
+.pill.PENDING, .pill.PROCESSING, .pill.VERIFYING, .pill.THROTTLED, .pill.FUP { background: rgba(245,196,81,.1); color: var(--warn); border: 1px solid rgba(245,196,81,.4); }
+.pill.FAILED, .pill.PERMANENT_FAILURE, .pill.EXPIRED, .pill.crit { background: rgba(242,109,109,.1); color: var(--crit); border: 1px solid rgba(242,109,109,.4); }
+input, button { font-family: var(--mono); font-size: 13px; }
+input { width: 100%; background: var(--bg); color: var(--txt); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; }
+input:focus { outline: none; border-color: var(--acc); }
+button { background: var(--acc); color: #04110d; border: none; border-radius: 4px; padding: 10px 16px; font-weight: 700; cursor: pointer; width: 100%; letter-spacing: 1px; }
+button:hover { filter: brightness(1.15); } button:disabled { opacity: .5; cursor: wait; }
+button.ghost { background: transparent; color: var(--acc); border: 1px solid var(--line); width: auto; padding: 4px 10px; font-size: 11px; }
+.pkg { cursor: pointer; border: 1px solid var(--line); border-radius: 6px; padding: 14px; background: var(--panel); }
+.pkg.sel { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.pkg .price { font-family: var(--mono); font-size: 20px; color: var(--acc); margin-top: 4px; }
+.pkg .meta { color: var(--dim); font-size: 11px; font-family: var(--mono); margin-top: 6px; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; }
+.tabs button { width: auto; background: transparent; color: var(--dim); border: 1px solid var(--line); padding: 6px 14px; font-size: 11px; }
+.tabs button.active { color: var(--acc); border-color: var(--acc); }
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--acc); padding: 12px 16px; border-radius: 6px; font-family: var(--mono); font-size: 12px; max-width: 380px; z-index: 99; }
+.toast.err { border-color: var(--crit); }
+footer { text-align: center; color: var(--dim); font-family: var(--mono); font-size: 10px; padding: 40px 0; letter-spacing: 2px; }

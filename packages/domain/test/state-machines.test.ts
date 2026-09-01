@@ -49,7 +49,6 @@ describe('state machines — construction invariants', () => {
       customerMachine,
       subscriptionMachine,
       paymentMachine,
-      networkOperationMachine,
       sessionMachine,
     ];
     for (const m of lifecycleMachines) {
@@ -155,6 +154,7 @@ describe('networkOperationMachine', () => {
     ['RETRYING', 'PERMANENT_FAILURE'],
     ['PROCESSING', 'PERMANENT_FAILURE'],
     ['QUEUED', 'PERMANENT_FAILURE'],
+    ['PERMANENT_FAILURE', 'QUEUED'],
   ] as const)('allows %s -> %s', (from, to) => {
     expect(() => networkOperationMachine.assertTransition(from, to)).not.toThrow();
   });

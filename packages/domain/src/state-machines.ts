@@ -129,7 +129,8 @@ export const networkOperationMachine = createStateMachine<NetworkOperationStatus
     VERIFYING: ['SUCCESS', 'RETRYING', 'PERMANENT_FAILURE'],
     RETRYING: ['PROCESSING', 'PERMANENT_FAILURE'],
     SUCCESS: [],
-    PERMANENT_FAILURE: [],
+    // Admin-forced retry of a permanently failed operation re-queues it (§4.4).
+    PERMANENT_FAILURE: ['QUEUED'],
   },
 );
 

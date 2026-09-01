@@ -2,5 +2,20 @@
   "name": "@nexora/web",
   "version": "0.1.0",
   "private": true,
-  "description": "NEXORA web frontends — customer portal, guest portal, admin command center. Implemented in Stage 7 (Next.js); dependency installation intentionally deferred to keep the Stage 1 toolchain light."
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^15.5.21",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "typescript": "^5.7.3"
+  }
 }

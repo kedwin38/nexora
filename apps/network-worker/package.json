@@ -14,6 +14,7 @@
     "@nexora/config": "*",
     "@nexora/db": "*",
     "@nexora/domain": "*",
+    "@nexora/engines": "*",
     "@nexora/logging": "*",
     "@nexora/router-sdk": "*"
   }

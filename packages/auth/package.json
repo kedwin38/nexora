@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nexora/domain": "*"
+    "@nexora/domain": "*",
+    "@node-rs/argon2": "^2.0.2"
   }
 }

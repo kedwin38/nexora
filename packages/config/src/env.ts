@@ -30,6 +30,12 @@ export const apiEnvSchema = databaseEnvSchema.merge(redisEnvSchema).extend({
   PORT: z.coerce.number().int().positive().default(5000),
   HOST: z.string().default('0.0.0.0'),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
+  SESSION_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  /** mock = deterministic in-process provider (local/dev); mpesa = Daraja. */
+  PAYMENT_PROVIDER: z.enum(['mock', 'mpesa']).default('mock'),
+  /** mock = in-memory router (local/dev); mikrotik = RouterOS API. */
+  ROUTER_ADAPTER: z.enum(['mock', 'mikrotik']).default('mock'),
+  CORS_ORIGIN: z.string().default('*'),
 });
 
 /**

@@ -21,8 +21,13 @@ export interface TokenPayload {
   readonly role: string;
 }
 
+export interface IssueMeta {
+  readonly ip?: string;
+  readonly userAgent?: string;
+}
+
 export interface TokenService {
-  issue(payload: TokenPayload): Promise<IssuedToken>;
+  issue(payload: TokenPayload, meta?: IssueMeta): Promise<IssuedToken>;
   verify(token: string): Promise<TokenPayload>;
   revoke(token: string): Promise<void>;
 }

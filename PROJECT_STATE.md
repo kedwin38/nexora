@@ -6,32 +6,39 @@ Live project status. Read this first when resuming work. Update after every chec
 
 ## CurrentObjectives
 
-- Stage 1 (Foundation): **COMPLETE**.
-- Railway incident 2026-09-01 (crash-loop, missing env) — **RESOLVED in code + runbook** (`RAILWAY_SETUP.md`); awaiting user to attach Postgres/Redis and set variables on Railway.
-- Stage 2 (Identity & Security): Argon2id auth, session tokens, RBAC middleware, audit framework — see CHECKPOINT.md "Next".
+- **Stages 1–9 COMPLETE.** Primary E2E **27/27**, chaos/security E2E **15/15**, unit **151/151**.
+- Remaining (ops/user-side only): Railway deploy of web+scheduler, SMS gateway creds, MikroTik hardware verification (KR-3), attach Postgres/Redis env vars (RAILWAY_SETUP.md).
 
 ## BuildOrder (from persona §6 — sequential, do not skip)
 
 | # | Stage | Steps | Status |
 |---|-------|-------|--------|
-| 1 | Foundation | 1–5 scaffold/tooling/schema/migration/kernel | ✅ COMPLETE (migration exec deferred to staging, KR-1) |
-| 2 | Identity & Security | 6–8 auth, RBAC, audit | NEXT |
-| 3 | Commerce | 9–13 customers, packages, billing, M-Pesa, subscriptions | PENDING |
-| 4 | Network | 14–20 router registry, adapters, ops queue, policy engine, desired state | PENDING |
-| 5 | Runtime & Control | 21–26 AAA, sessions, usage, FUP, expiry, reconciliation | PENDING |
-| 6 | Event & Workflow | 27–30 outbox dispatcher, worker framework, event bus, orchestration | PENDING |
+| 1 | Foundation | 1–5 scaffold/tooling/schema/migration/kernel | ✅ COMPLETE |
+| 2 | Identity & Security | 6–8 auth, RBAC, audit | ✅ COMPLETE |
+| 3 | Commerce | 9–13 customers, packages, billing, M-Pesa, subscriptions | ✅ COMPLETE |
+| 4 | Network | 14–20 router registry, adapters, ops queue, policy engine, desired state | ✅ COMPLETE |
+| 5 | Runtime & Control | 21–26 AAA, sessions, usage, FUP, expiry, reconciliation | ✅ COMPLETE |
+| 6 | Event & Workflow | 27–30 outbox dispatcher, worker framework, event bus, orchestration | ✅ COMPLETE (ADR-011: Postgres transport) |
+| 7 | API & Frontends | 31–35 API surface, webhooks, portals, admin command center | ✅ COMPLETE (Next.js portal + interim portal) |
+| 8 | Operations & Hardening | 36–40 cron, health, observability, notifications, Railway config | ✅ CORE (SMS gateway + web-on-Railway pending) |
+| 9 | Verification | 41–45 unit/integration/E2E/chaos/security tests | ✅ COMPLETE (unit 151 · e2e 27 · chaos/security 15) |
 | 7 | API & Frontends | 31–35 API surface, webhooks, portals, admin command center | PENDING |
 | 8 | Operations & Hardening | 36–40 cron, health, observability, notifications, Railway config | PENDING |
 | 9 | Verification | 41–45 unit/integration/E2E/chaos/security tests | PENDING |
 
 ## CompletedModules
 
-- Monorepo scaffold: apps/{api,worker,network-worker,scheduler,web}, packages/{domain,contracts,config,logging,events,auth,db,router-sdk,payment-sdk}
-- Root tooling: TypeScript strict (NodeNext), ESLint 9 flat config, Prettier, Vitest, npm workspaces
-- **Initial Prisma migration** (`packages/db/prisma/migrations/20260901000000_initial/migration.sql`, 26 tables) generated offline via `prisma migrate diff` — `migrate deploy` now works on Railway (pre-deploy hook on api)
-- **Per-app `railway.json`** (Nixpacks build, start commands, api healthcheck + pre-deploy migration)
-- **`RAILWAY_SETUP.md`** — deployment runbook (attach Postgres/Redis, reference variables, secrets, one-time seed)
-- Shared kernel (@nexora/domain): branded IDs, Result, NexoraError taxonomy, event envelope, correlation IDs
+- Stage 1: monorepo, kernel, state machines, contracts, config, logging, events ports, RBAC matrix, router/payment SDKs, Prisma schema+migration+seed, Dockerfiles, railway.json, runbook
+- Stage 2: Argon2id hasher, HMAC token service (revocable staff sessions), auth plugin (principal/requirePermission/audit), auth + customer endpoints, rate limits
+- Stage 3: package catalog, payment initiate (idempotent), payment status, M-Pesa webhook atomic activation transaction (subscription+snapshot+FUP+desired state+network op+outbox+audit), Daraja + Mock providers
+- Stage 4 core: Mock + MikroTik adapters, network-worker op executor (claim→execute→read-back verify→retry/permanent), admin op retry, policy resolver + FUP evaluator (pure)
+- Stage 6 core: outbox dispatcher (worker), outbox writes at all mutations, SystemEvent trail
+- Admin API: summary, customers, payments, network-operations, audit; RBAC enforced (E2E-verified 403)
+- Interim NOC portal (dark, mono) served at :5000 — customer purchase flow + admin console
+  - Stage 5 engines: usage (session auto-create, rollover-safe deltas, hourly aggregation), FUP (transitions + versioned desired-state + APPLY_POLICY/restore ops + admin reset), expiry (EXPIRED + revoke + DEAUTHORIZE + session termination + audit), reconciliation (drift→repair ops, synchronizedAt), router-health (status transitions + events)
+- packages/engines workspace; scheduler enqueues 6 deduped Job types; worker/network-worker job runners partitioned DB-bound vs router-bound
+- Admin: sessions list/disconnect, FUP reset (audited); customer /me with FUP usage
+- `npm run e2e`: embedded PostgreSQL 17.5 + migrations + seed + 3 services + **25 acceptance checks**
 - State machines (@nexora/domain): Customer, Subscription, Payment, NetworkOperation, Session, FUP — all with exhaustive unit tests
 - Contracts (@nexora/contracts): event catalog (42 event types), API error envelope, health/pagination shapes
 - Config (@nexora/config): zod env schemas + strict parseEnv (tested)
@@ -73,15 +80,11 @@ See docs/technical-debt.md — TD-001 (web deps deferred), TD-002 (Docker runtim
 
 ## ValidationStatus
 
-- [x] `npm install` — 333 packages (6m)
-- [x] Prisma schema valid (`prisma validate`) — "schema is valid 🚀"
-- [x] `prisma generate` — Prisma Client v6.19.3
-- [x] Initial migration SQL — 26 CREATE TABLE statements, ships in repo
-- [x] TypeScript strict typecheck passes — all 13 workspaces, exit 0 (re-verified after env split)
-- [x] ESLint passes — exit 0
-- [x] Vitest suite green — 108/108 tests, 4 files (re-verified after env split)
-- [x] esbuild bundles build — 4 apps (`api` rebuilt after env change)
-- [x] API boot smoke test — `/health/live` 200; `/health/ready` 503 degraded with postgres:down (correct, no local DB); 404 returns structured error envelope with correlationId
-- [x] **Railway build verified by production deploy** (2026-09-01): containers built, bundles executed, fail-fast EnvValidation fired exactly as designed
-- [ ] Railway runtime green — awaiting user: attach Postgres + Redis, set reference vars + SESSION_SECRET per `RAILWAY_SETUP.md`
-- [x] npm audit reviewed — KR-6 accepted (prisma CLI dev-only transitive advisory)
+- [x] TypeScript strict typecheck — 13 workspaces, exit 0 (after Stage 2–4 code)
+- [x] ESLint — exit 0
+- [x] Vitest — **140/140** (8 files)
+- [x] Bundles ×4 — build clean (argon2 external)
+- [x] **`npm run e2e` — 25/25 PASS** (full control loop: purchase→authorize→usage session→FUP throttle (desired v2, verified op)→reconciliation synchronized→expiry deauth (verified)→customer-visible state; duplicate-callback no-op; RBAC 403)
+- [x] Prisma schema valid + client generated + initial migration regenerated (Payment↔Package relation)
+- [ ] Railway runtime green — awaiting user env vars (RAILWAY_SETUP.md)
+- [x] npm audit reviewed — KR-6 accepted

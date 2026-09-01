@@ -109,12 +109,26 @@ async function main(): Promise<void> {
     bodyLimit: 1_048_576,
   });
 
+<<<<<<< HEAD
   await app.register(cors, { origin: env.CORS_ORIGIN });
   await app.register(rateLimit, {
     global: false,
     max: 300,
     timeWindow: '1 minute',
   });
+=======
+  // Root endpoint
+  app.get('/', async (_request, reply) => {
+    return await reply.status(200).send({
+      message: 'Nexora API is online',
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  await registerHealthRoutes(app, { serviceName: 'api', startupTime });
+  registerErrorHandler(app, logger);
+>>>>>>> 9f78a20e0cc6046e6a3ba8e211432a934cbf0638
 
   // Correlation ID on every response + request access logging (hooks must be
   // registered before routes to apply to them).

@@ -1,11 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Server-mode Next (rewrites need it). Proxy API calls to the API service,
-  // so the browser only ever talks to one origin.
+  // Server-mode Next (rewrites need it). Proxy API calls to the API service.
+  // Use the private network DNS name so rewrites work regardless of deployment.
   async rewrites() {
-    const apiBase = process.env.API_PROXY_URL ?? 'http://localhost:5000';
+    // At build time, use private network. At runtime, process.env.API_PROXY_URL
+    // from Railway variables can override this if set.
+    const apiBase = process.env.API_PROXY_URL || 'http://api.railway.internal';
     return [{ source: '/api/:path*', destination: `${apiBase}/api/:path*` }];
   },
 };
 
 export default nextConfig;
+

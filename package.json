@@ -30,7 +30,8 @@
     "dev:api": "npm run dev -w @nexora/api",
     "dev:worker": "npm run dev -w @nexora/worker",
     "dev:network-worker": "npm run dev -w @nexora/network-worker",
-    "dev:scheduler": "npm run dev -w @nexora/scheduler"
+    "dev:scheduler": "npm run dev -w @nexora/scheduler",
+    "start": "npm run start --workspace @nexora/web"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

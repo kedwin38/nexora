@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "start": "npm run start --workspace @nexora/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write \"apps/*/src/**/*.ts\" \"packages/*/src/**/*.ts\"",

@@ -1,4 +1,40 @@
-# CHECKPOINT — Full commercial-readiness AUTOPSY complete
+# CHECKPOINT — Build-failure root cause FIXED (Railway production-mode installs)
+
+**Date:** 2026-09-04 (follow-up) · **Status: prod-mode install simulated & PASSED · unit 161/161 · gates green**
+
+## Root cause of "all module builds failing" on Railway
+
+`NODE_ENV=production` is set as a service variable → npm honors it **at build
+time** → `npm install` runs with `--omit=dev` → devDependencies are missing →
+`prisma` (CLI), `tsx`, and `esbuild` were unavailable → `npm run db:generate`,
+`npm run build`, and the `preDeployCommand` migrate all fail for EVERY service.
+
+## Fix (structural — works regardless of NODE_ENV)
+
+- `esbuild` → root **dependencies** (was dev).
+- `prisma` + `tsx` → `@nexora/db` **dependencies** (were dev). Critical:
+  prisma CLI is needed at RUNTIME for the pre-deploy migration command, not
+  just at build time.
+
+## Proof (Railway simulation, executed locally)
+
+1. Purged node_modules + lockfile.
+2. `NODE_ENV=production npm install --omit=dev` → 172 packages, clean.
+3. `prisma generate` ✓ (CLI present).
+4. `npm run build --workspaces` → all 4 services **Done** ✓ (esbuild present).
+5. `migrate:deploy` → schema loads ✓ (P1001 only because no local DB — Railway has the real DATABASE_URL).
+6. Restored dev deps → 161/161 unit, typecheck, lint green.
+
+## Action for the user
+
+Push the ENTIRE working tree to GitHub (including the regenerated
+`package-lock.json` — it was rebuilt from scratch), then redeploy the Railway
+services. If builds still fail after this push, the error text will no longer
+be the toolchain — paste the red lines and it will be a push-integrity issue.
+
+---
+
+# (Previous) CHECKPOINT — Full commercial-readiness AUTOPSY complete
 
 **Date:** 2026-09-04 · **Status: ALL GREEN — unit 161/161 · e2e 37/37 · chaos 15/15 · drift 0 · live stack verified**
 

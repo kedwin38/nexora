@@ -444,7 +444,7 @@ views.admin = async (tab) => {
       <div class="card"><div class="k">Payment configuration (§4.1)</div><br>
         <table>
           <tr><td>Provider</td><td class="mono">${esc(pc?.provider || '—')}</td></tr>
-          <tr><td>Daraja configured</td><td>${pc?.daraja?.configured ? pill('SUCCESS') : pill('PENDING')} ${pc?.daraba?.configured ? '' : '(mock mode until MPESA_* secrets are set)'}</td></tr>
+          <tr><td>Daraja configured</td><td>${pc?.daraja?.configured ? pill('SUCCESS') : pill('PENDING')} ${pc?.daraja?.configured ? '' : '(mock mode until MPESA_* secrets are set)'}</td></tr>
           <tr><td>Daraja env</td><td>${esc(pc?.daraja?.environment || '—')}</td></tr>
           <tr><td>Callback URL</td><td class="mono">${esc(pc?.daraja?.callbackUrl || 'not set')}</td></tr>
         </table>

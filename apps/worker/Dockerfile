@@ -9,6 +9,7 @@ COPY packages/config/package.json packages/config/
 COPY packages/logging/package.json packages/logging/
 COPY packages/events/package.json packages/events/
 COPY packages/auth/package.json packages/auth/
+COPY packages/engines/package.json packages/engines/
 COPY packages/db/package.json packages/db/
 COPY packages/router-sdk/package.json packages/router-sdk/
 COPY packages/payment-sdk/package.json packages/payment-sdk/

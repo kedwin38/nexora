@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nexora/contracts": "*",
     "@nexora/db": "*",
     "@nexora/domain": "*",
     "@nexora/router-sdk": "*"

@@ -10,6 +10,7 @@ COPY packages/config/package.json packages/config/
 COPY packages/logging/package.json packages/logging/
 COPY packages/events/package.json packages/events/
 COPY packages/auth/package.json packages/auth/
+COPY packages/engines/package.json packages/engines/
 COPY packages/db/package.json packages/db/
 COPY packages/router-sdk/package.json packages/router-sdk/
 COPY packages/payment-sdk/package.json packages/payment-sdk/
@@ -28,6 +29,7 @@ RUN addgroup -S nexora && adduser -S nexora -G nexora
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/packages/db/prisma ./prisma
+COPY --from=build /app/apps/api/public ./public
 
 USER nexora
 EXPOSE 5000

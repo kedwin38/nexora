@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm install --include-workspace-root ../.. && npm run build --workspace @nexora/web"
+    "buildCommand": "npm install && npm run build --workspace @nexora/web"
   },
   "deploy": {
     "startCommand": "npm run start --workspace @nexora/web",

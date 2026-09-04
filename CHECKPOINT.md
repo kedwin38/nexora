@@ -1,4 +1,43 @@
-# CHECKPOINT — Commercial-readiness sweep COMPLETE (all 19 criteria ✅)
+# CHECKPOINT — Full commercial-readiness AUTOPSY complete
+
+**Date:** 2026-09-04 · **Status: ALL GREEN — unit 161/161 · e2e 37/37 · chaos 15/15 · drift 0 · live stack verified**
+
+## Autopsy scope (file-by-file)
+
+- **P0 scans**: zero conflict markers, zero TODO/FIXME/NOT_IMPLEMENTED in all source; dev-stack "failure" was operator cleanup, not a defect.
+- **Migration drift gate (NEW)**: `scripts/migration-drift-check.ts` — boots fresh embedded PG, applies all shipped migrations, diffs live DB vs schema → **ZERO DRIFT**. Add to any release checklist.
+- **BigInt reply audit**: every HTTP reply path that touches byte counters stringifies (`toString()`) — package catalog, /me FUP, admin sessions/payments/packages/3-pane — verified file-by-file. No BigInt can reach Fastify's serializer (ADR-007 hazard closed).
+- **State-machine usage audit**: every transition in engines/workers goes through the machine asserts (fup, expiry, ops); admin retry uses the PERMANENT_FAILURE→QUEUED edge.
+- **Auth audit**: every admin route gated by requirePermission; customer routes by requireCustomer; webhooks unauthenticated by design (provider-bound); rate limits on login/register/initiate/guest/callback.
+
+## Defects found & fixed in this autopsy
+
+| # | Severity | Defect | Fix |
+|---|---|---|---|
+| 1 | **CRITICAL (prod hazard)** | `MOCK_PAYMENT_AUTO_CONFIRM_MS` defaulted to 3000 — a production deployment on the mock provider would auto-grant paid service after 3s | Default now **0 (disabled)**; dev:stack opts in at 3000; documented in .env.example |
+| 2 | HIGH (build break) | All 4 Dockerfiles missing `COPY packages/engines/package.json` — Docker builds fail after engines extraction | Added to api/worker/network-worker/scheduler |
+| 3 | MEDIUM | API Dockerfile runtime missing `apps/api/public` — portal absent in containerized deploys | `COPY --from=build /app/apps/api/public ./public` |
+| 4 | MEDIUM | No `.dockerignore` — images would ship .tmp (embedded PG data), .next, node_modules | Added |
+| 5 | MEDIUM | `apps/web/railway.json` buildCommand escaped context (`../..`) — broken on Railway | Rooted `npm install && npm run build --workspace @nexora/web` |
+| 6 | LOW (Railpack) | Root package.json had no `start` — Railpack prepare fails without UI override | Added `start → @nexora/web` |
+| 7 | LOW | Portal payment-config tab typo (`daraba`) | Fixed |
+| 8 | LOW | Web portal surfaced bare "HTTP 500" when API proxy unreachable | Client now raises `API_UNREACHABLE` with actionable message (check API_PROXY_URL) |
+| 9 | TRIVIAL | engines package unused `@nexora/contracts` dep | Removed |
+
+## Re-certification after fixes
+
+typecheck ✅ · lint ✅ · unit **161/161** ✅ · 5 service bundles + web build ✅ · e2e **37/37** ✅ · chaos/security **15/15** ✅ · migration drift **ZERO** ✅ · dev:stack live (root/portal/guest/catalog 200) ✅
+
+## Production sync (required — Railway deploys from GitHub, not this tree)
+
+1. Commit & push the ENTIRE working tree (fixes above are not on GitHub yet).
+2. Railway `web` → Variables → `API_PROXY_URL=https://nexoraapi-production-596b.up.railway.app` (the standing login-500 blocker).
+3. Redeploy all services; delete `ADMIN_EMAIL`/`ADMIN_PASSWORD` from api after seeding.
+4. Before real money: `PAYMENT_PROVIDER=mpesa` + `MPESA_*` secrets; `ROUTER_ADAPTER=mikrotik` + `ROUTER_01_PASSWORD` for hardware.
+
+---
+
+# (Previous) CHECKPOINT — Commercial-readiness sweep COMPLETE (all 19 criteria ✅)
 
 **Date:** 2026-09-01 (final) · **Status: unit 161/161 · e2e 37/37 · chaos+security 15/15 · live stack verified**
 

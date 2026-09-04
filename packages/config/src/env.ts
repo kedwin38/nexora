@@ -34,8 +34,10 @@ export const apiEnvSchema = databaseEnvSchema.merge(redisEnvSchema).extend({
   /** mock = deterministic in-process provider (local/dev); mpesa = Daraja. */
   PAYMENT_PROVIDER: z.enum(['mock', 'mpesa']).default('mock'),
   /** When the mock provider is active, auto-confirm purchases after N ms so
-   *  the full flow completes without a phone (local/dev only). */
-  MOCK_PAYMENT_AUTO_CONFIRM_MS: z.coerce.number().int().min(0).default(3000),
+   *  the full flow completes without a phone. DEFAULT 0 = disabled — this is
+   *  a dev convenience only; a production system must NEVER auto-confirm
+   *  uncommitted payments (free-service hazard). dev:stack sets 3000. */
+  MOCK_PAYMENT_AUTO_CONFIRM_MS: z.coerce.number().int().min(0).default(0),
   /** mock = in-memory router (local/dev); mikrotik = RouterOS API. */
   ROUTER_ADAPTER: z.enum(['mock', 'mikrotik']).default('mock'),
   CORS_ORIGIN: z.string().default('*'),

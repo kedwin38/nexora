@@ -46,6 +46,15 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   });
   const body = (await response.json().catch(() => ({}))) as T & { error?: ApiError };
   if (!response.ok) {
+    // Non-JSON 500 = the Next.js proxy itself failed (API unreachable) —
+    // almost always a missing/wrong API_PROXY_URL on the web service.
+    if (response.status === 500 && body.error === undefined) {
+      throw new ApiCallError({
+        code: 'API_UNREACHABLE',
+        message: 'API service unreachable — check API_PROXY_URL on the web service and that the api service is deployed.',
+        correlationId: '',
+      });
+    }
     throw new ApiCallError(body.error ?? { code: 'UNKNOWN', message: `HTTP ${response.status}`, correlationId: '' });
   }
   return body;

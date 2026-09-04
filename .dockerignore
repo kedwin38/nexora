@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/coverage
+.tmp
+*.log
+logs
+.git
+.env
+.env.*
+*.md
+screenshots

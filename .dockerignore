@@ -11,3 +11,6 @@ logs
 .env.*
 *.md
 screenshots
+apps/web/.next
+apps/*/Dockerfile
+

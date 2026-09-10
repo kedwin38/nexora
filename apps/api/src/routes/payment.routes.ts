@@ -11,7 +11,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ForbiddenError, NotFoundError, ValidationError } from '@nexora/domain';
+import { ForbiddenError, NotFoundError, TenantUnavailableError, ValidationError } from '@nexora/domain';
 import { MockPaymentProvider, normalizeKenyanMsisdn } from '@nexora/payment-sdk';
 import { activateOnPaymentSuccess } from '@nexora/engines';
 import type { NexoraContext } from '../context.js';
@@ -55,7 +55,7 @@ export function scheduleMockAutoConfirm(
 
 /** How long a PENDING STK push may wait before reconciliation expires it.
  *  M-Pesa prompts lapse after ~60s; we allow generous slack for callback lag. */
-const STK_DEADLINE_MS = 3 * 60_000;
+export const STK_DEADLINE_MS = 3 * 60_000;
 
 const initiateSchema = z.object({
   packageId: z.string().uuid(),
@@ -85,8 +85,16 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
       const input = parseOrThrow(initiateSchema, request.body, request.id);
       const customerId = request.principal!.subjectId;
 
-      const customer = await nexora.prisma.customer.findUnique({ where: { id: customerId } });
+      const customer = await nexora.prisma.customer.findUnique({
+        where: { id: customerId },
+        include: { tenant: { select: { status: true } } },
+      });
       if (customer === null) throw new NotFoundError('Customer', customerId, request.id);
+      // A suspended/closed company cannot collect — refuse before any STK push
+      // (autopsy F5). Existing customer tokens outlive a suspension otherwise.
+      if (customer.tenant.status === 'SUSPENDED' || customer.tenant.status === 'CLOSED') {
+        throw new TenantUnavailableError(undefined, request.id);
+      }
 
       const phone =
         input.phone !== undefined ? normalizeKenyanMsisdn(input.phone) : customer.phoneNumber;

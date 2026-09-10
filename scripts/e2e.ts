@@ -638,6 +638,71 @@ async function main(): Promise<void> {
       const platformForbidden = await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/summary`, { headers: { Authorization: `Bearer ${signupBody.token}` } });
       check('tenant admin denied on platform endpoint (403)', platformForbidden.status === 403);
 
+      // ---- Flow N: network provisioning is tenant-scoped (autopsy F1/F2) ----
+      // Give Acme its own router + customer, confirm a payment, and verify the
+      // AUTHORIZE lands on ACME's router — never the default company's.
+      const acmeId = signupBody.tenant!.id;
+      const acmeRouter = await prisma.router.create({
+        data: { tenantId: acmeId, name: 'acme-router-01', vendor: 'MIKROTIK', host: '10.77.0.1', port: 8728, username: 'admin', passwordEnvVar: 'ACME_ROUTER_PASSWORD', site: 'acme-hq' },
+      });
+      const defaultRouter = await prisma.router.findFirstOrThrow({ where: { tenantId: 'default' } });
+      const acmeCustomer = await prisma.customer.create({
+        data: { customerNumber: `E2E-ACME-${Date.now().toString(36)}`, tenantId: acmeId, accountType: 'REGISTERED', status: 'ACTIVE', phoneNumber: '254799000222' },
+      });
+      await prisma.device.create({ data: { customerId: acmeCustomer.id, macAddress: 'AC:11:22:33:44:01' } });
+      const acmePkg = await prisma.package.findFirstOrThrow({ where: { tenantId: acmeId, status: 'ACTIVE' }, include: { policy: true } });
+      const acmePay = await prisma.payment.create({
+        data: { tenantId: acmeId, provider: 'MPESA', providerTransactionId: 'ws_CO_E2E_ACME_1', clientReference: crypto.randomUUID(), customerId: acmeCustomer.id, packageId: acmePkg.id, amountMinor: acmePkg.priceMinor, status: 'PENDING', phoneNumber: '254799000222', deadlineAt: new Date(Date.now() + 60_000) },
+      });
+      await fetch(`http://127.0.0.1:${PORT}/api/v1/webhooks/mpesa`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Body: { stkCallback: { CheckoutRequestID: 'ws_CO_E2E_ACME_1', ResultCode: 0, ResultDesc: 'ok', CallbackMetadata: { Item: [ { Name: 'Amount', Value: acmePkg.priceMinor / 100 }, { Name: 'MpesaReceiptNumber', Value: 'ACMERCPT01' } ] } } } }),
+      });
+      let acmeAuthOp = null as null | { routerId: string };
+      for (let i = 0; i < 15 && acmeAuthOp === null; i += 1) {
+        await sleep(500);
+        acmeAuthOp = await prisma.networkOperation.findFirst({ where: { subscriptionId: (await prisma.payment.findUniqueOrThrow({ where: { id: acmePay.id } })).subscriptionId ?? '', operationType: 'AUTHORIZE' }, select: { routerId: true } });
+      }
+      check('provisioning uses the customer’s OWN tenant router, not another company’s', acmeAuthOp !== null && acmeAuthOp.routerId === acmeRouter.id && acmeAuthOp.routerId !== defaultRouter.id, `router=${acmeAuthOp?.routerId === acmeRouter.id ? 'acme' : acmeAuthOp?.routerId}`);
+
+      // ---- Flow R: real Daraja-shaped callback parses even in mock mode (F3) ----
+      const darajaCust = await prisma.customer.create({
+        data: { customerNumber: `E2E-DARAJA-${Date.now().toString(36)}`, tenantId: 'default', accountType: 'REGISTERED', status: 'ACTIVE', phoneNumber: '254712900001' },
+      });
+      const darajaPkg = await prisma.package.findFirstOrThrow({ where: { tenantId: 'default', status: 'ACTIVE' } });
+      const darajaPay = await prisma.payment.create({
+        data: { tenantId: 'default', provider: 'MPESA', providerTransactionId: 'ws_CO_E2E_REAL_1', clientReference: crypto.randomUUID(), customerId: darajaCust.id, packageId: darajaPkg.id, amountMinor: darajaPkg.priceMinor, status: 'PENDING', phoneNumber: '254712000111', deadlineAt: new Date(Date.now() + 60_000) },
+      });
+      const darajaBody = { Body: { stkCallback: { MerchantRequestID: 'm-1', CheckoutRequestID: 'ws_CO_E2E_REAL_1', ResultCode: 0, ResultDesc: 'The service request is processed successfully.', CallbackMetadata: { Item: [ { Name: 'Amount', Value: darajaPkg.priceMinor / 100 }, { Name: 'MpesaReceiptNumber', Value: 'REALRCPT99' } ] } } } };
+      const darajaCb = await fetch(`http://127.0.0.1:${PORT}/api/v1/webhooks/mpesa`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(darajaBody) });
+      await sleep(400);
+      const darajaAfter = await prisma.payment.findUniqueOrThrow({ where: { id: darajaPay.id } });
+      check('real Daraja callback confirmed under mock platform default (F3)', darajaCb.status === 200 && darajaAfter.status === 'SUCCESS' && darajaAfter.receipt === 'REALRCPT99');
+
+      // ---- Flow S: suspended company is refused, then reactivated (F5) ----
+      await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/tenants/${acmeId}`, { method: 'PATCH', headers: { ...ownerAuth, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'SUSPENDED' }) });
+      const suspendedList = await fetch(`http://127.0.0.1:${PORT}/api/v1/packages?tenant=${tenantSlug}`);
+      check('suspended company refuses public traffic (403, no reroute to default)', suspendedList.status === 403);
+      const acmeStaffAfter = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/summary`, { headers: { Authorization: `Bearer ${signupBody.token}` } });
+      check('suspended company staff sessions revoked (401)', acmeStaffAfter.status === 401);
+      await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/tenants/${acmeId}`, { method: 'PATCH', headers: { ...ownerAuth, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ACTIVE' }) });
+      const reactivated = await fetch(`http://127.0.0.1:${PORT}/api/v1/packages?tenant=${tenantSlug}`);
+      check('reactivated company serves public traffic again', reactivated.status === 200);
+
+      // ---- Flow C: concurrent callbacks activate exactly once (autopsy F4) ----
+      const raceCust = await prisma.customer.create({
+        data: { customerNumber: `E2E-RACE-${Date.now().toString(36)}`, tenantId: 'default', accountType: 'REGISTERED', status: 'ACTIVE', phoneNumber: '254712900002' },
+      });
+      const racePkg = await prisma.package.findFirstOrThrow({ where: { tenantId: 'default', status: 'ACTIVE' } });
+      const racePay = await prisma.payment.create({
+        data: { tenantId: 'default', provider: 'MPESA', providerTransactionId: 'ws_CO_E2E_RACE_1', clientReference: crypto.randomUUID(), customerId: raceCust.id, packageId: racePkg.id, amountMinor: racePkg.priceMinor, status: 'PENDING', phoneNumber: '254712000111', deadlineAt: new Date(Date.now() + 60_000) },
+      });
+      const raceCb = () => fetch(`http://127.0.0.1:${PORT}/api/v1/webhooks/mpesa`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ providerTransactionId: 'ws_CO_E2E_RACE_1', resultCode: 0, resultDesc: 'ok', amountMinor: racePkg.priceMinor, receipt: 'RACERCPT1' }) });
+      await Promise.all([raceCb(), raceCb(), raceCb()]);
+      await sleep(600);
+      const raceSubs = await prisma.subscription.count({ where: { paymentReference: racePay.id } });
+      check('concurrent callbacks on one payment activate exactly once (F4)', raceSubs === 1, `subs=${raceSubs}`);
+
       // ---- Flow X: payment lifecycle — cancel + timeout (no hanging) ----
       const cancelCustomer = await prisma.customer.findFirstOrThrow({ where: { phoneNumber: '254712000111' } });
       const cancelPkg = await prisma.package.findFirstOrThrow({ where: { tenantId: 'default', status: 'ACTIVE' } });

@@ -114,6 +114,7 @@ export interface AuditInput {
 export async function writeAudit(nexora: NexoraContext, input: AuditInput): Promise<void> {
   await nexora.prisma.auditLog.create({
     data: {
+      tenantId: input.actor?.tenantId ?? null,
       actorId: input.actor?.subjectType === 'user' ? input.actor.subjectId : null,
       actorType: input.actor === null ? 'SYSTEM' : input.actor.subjectType === 'user' ? 'USER' : 'CUSTOMER',
       action: input.action,

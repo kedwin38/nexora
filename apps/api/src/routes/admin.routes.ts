@@ -4,10 +4,22 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { networkOperationMachine } from '@nexora/domain';
+import { networkOperationMachine, ValidationError } from '@nexora/domain';
 import { resetFupForSubscription } from '@nexora/engines';
 import type { NexoraContext } from '../context.js';
 import { writeAudit } from '../plugins/auth.js';
+
+const PAYMENT_STATUSES = ['INITIATED', 'PENDING', 'SUCCESS', 'FAILED', 'CANCELLED', 'EXPIRED', 'REVERSED', 'REFUNDED'];
+const NETWORK_OP_STATUSES = ['QUEUED', 'PROCESSING', 'VERIFYING', 'SUCCESS', 'RETRYING', 'PERMANENT_FAILURE'];
+
+/** Validate an optional ?status= filter against a known enum → 400, not 500. */
+function validatedStatus(value: string | undefined, allowed: string[], requestId: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (!allowed.includes(value)) {
+    throw new ValidationError(`Invalid status filter '${value}'.`, { allowed }, requestId);
+  }
+  return value;
+}
 
 export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraContext): Promise<void> {
   app.get(
@@ -106,9 +118,10 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
       const page = Math.max(1, Number(request.query.page ?? 1));
       const limit = Math.min(100, Math.max(1, Number(request.query.limit ?? 20)));
       const tenantId = request.principal!.tenantId;
+      const status = validatedStatus(request.query.status, PAYMENT_STATUSES, request.id);
       const where = {
         tenantId,
-        ...(request.query.status !== undefined ? { status: request.query.status as never } : {}),
+        ...(status !== undefined ? { status: status as never } : {}),
       };
       const [payments, total] = await Promise.all([
         nexora.prisma.payment.findMany({
@@ -150,9 +163,10 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
       const page = Math.max(1, Number(request.query.page ?? 1));
       const limit = Math.min(100, Math.max(1, Number(request.query.limit ?? 20)));
       const tenantId = request.principal!.tenantId;
+      const status = validatedStatus(request.query.status, NETWORK_OP_STATUSES, request.id);
       const where = {
         router: { tenantId },
-        ...(request.query.status !== undefined ? { status: request.query.status as never } : {}),
+        ...(status !== undefined ? { status: status as never } : {}),
       };
       const [operations, total] = await Promise.all([
         nexora.prisma.networkOperation.findMany({
@@ -223,17 +237,12 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
     async (request, reply) => {
       const page = Math.max(1, Number((request.query as Record<string, string | undefined>).page ?? 1));
       const limit = Math.min(100, Math.max(1, Number((request.query as Record<string, string | undefined>).limit ?? 20)));
-      const tenantId = request.principal!.tenantId;
-      // A company admin sees audit entries authored by their own staff plus
-      // system/worker actions (which bear no actor). The platform owner, on
-      // the 'platform' tenant, additionally sees platform-level actions.
-      const tenantUserIds = (
-        await nexora.prisma.user.findMany({ where: { tenantId }, select: { id: true } })
-      ).map((u) => u.id);
+      // A company admin sees only their own tenant's audit entries (indexed by
+      // AuditLog.tenantId, autopsy F10); the platform owner sees everything.
       const where =
         request.principal!.role === 'PLATFORM_OWNER'
           ? {}
-          : { OR: [{ actorId: { in: tenantUserIds } }, { actorType: { in: ['SYSTEM', 'WORKER'] } }] };
+          : { tenantId: request.principal!.tenantId };
       const [logs, total] = await Promise.all([
         nexora.prisma.auditLog.findMany({
           where,

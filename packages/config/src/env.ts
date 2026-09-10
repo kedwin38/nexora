@@ -47,11 +47,13 @@ export const apiEnvSchema = databaseEnvSchema.merge(redisEnvSchema).extend({
   /** AES-256-GCM master key for tenant-supplied credentials at rest (ADR-013).
    *  Required for any tenant to self-configure M-Pesa; optional otherwise. */
   CREDENTIALS_ENCRYPTION_KEY: z.string().min(32).optional(),
-  /** Allow public company self-signup. Off by default in production postures. */
+  /** Allow public company self-signup. OFF by default — opt in explicitly with
+   *  ALLOW_TENANT_SIGNUP=true once you're ready to accept new companies
+   *  (autopsy F7). Keeps an unconfigured deployment from being spammed. */
   ALLOW_TENANT_SIGNUP: z
     .union([z.boolean(), z.string()])
     .transform((v) => v === true || v === 'true' || v === '1')
-    .default(true),
+    .default(false),
 });
 
 /**

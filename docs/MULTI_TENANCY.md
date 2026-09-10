@@ -55,9 +55,25 @@ The platform owner can:
 - **suspend** / **reactivate** a company (reserved tenants are protected),
 - read system health (outbox backlog, dead events, jobs, routers, sessions).
 
+## Network plane is tenant-scoped
+
+Provisioning and reconciliation are tenant-aware end to end: activation, FUP
+throttle and expiry select a router scoped to the subscription's `tenantId`;
+the network-worker iterates every registered router and runs each usage-sync /
+reconciliation / health cycle scoped to that router's own tenant; usage
+attribution matches a device only within the router's tenant. A company's
+router is never driven with another company's desired state.
+
+> Current model assumes **one router (site) per tenant**. If a tenant runs
+> several routers, reconciliation drives that tenant's desired state at each of
+> them, which is correct only when all its subscribers are reachable from every
+> router. Per-subscriber router/site binding (so a subscriber reconciles only
+> against its own site) is the next step for multi-site tenants.
+
 ## Notes & limitations
 
 - Staff email is globally unique (email = identity across the platform).
-- `AuditLog` has no `tenantId` column; company admins see audit entries by
-  their own staff plus system/worker actions, while the platform owner sees
-  all. A future migration may add an explicit `tenantId` to audit rows.
+- Suspending or closing a company blocks its public traffic (403), revokes its
+  staff sessions immediately, and refuses the payment path — data is retained.
+- `AuditLog` carries a `tenantId`: company admins see only their own tenant's
+  entries (indexed); the platform owner sees all.

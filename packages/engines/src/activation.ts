@@ -49,13 +49,24 @@ export async function activateOnPaymentSuccess(
   const rateLimit = { downloadKbps: policySnapshot.downloadKbps, uploadKbps: policySnapshot.uploadKbps };
 
   return await prisma.$transaction(async (tx) => {
-    const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
-    paymentMachine.assertTransition(payment.status, 'SUCCESS');
-
-    await tx.payment.update({
-      where: { id: payment.id },
+    // Atomic claim: only ONE concurrent path (webhook vs. reconciliation) can
+    // flip a non-terminal payment to SUCCESS. The row lock the UPDATE takes
+    // serializes racers; the loser matches 0 rows and returns the winner's
+    // subscription instead of creating a duplicate (autopsy F4).
+    const claim = await tx.payment.updateMany({
+      where: { id: paymentId, status: { in: ['PENDING', 'INITIATED'] } },
       data: { status: 'SUCCESS', receipt: input.receipt, completedAt: now },
     });
+    const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    if (claim.count === 0) {
+      // Lost the race (already terminal). If a concurrent path activated it,
+      // hand back that subscription; otherwise the payment is genuinely
+      // non-activatable and we surface an invalid-transition error.
+      if (payment.status === 'SUCCESS' && payment.subscriptionId !== null) {
+        return { id: payment.subscriptionId, outcome: 'ACTIVATED' as const };
+      }
+      paymentMachine.assertTransition(payment.status, 'SUCCESS');
+    }
     await tx.paymentAttempt.create({
       data: {
         paymentId: payment.id,
@@ -124,8 +135,12 @@ export async function activateOnPaymentSuccess(
         });
       }
 
-      // Default router + purchasing device for Phase 1 (single-router deployments).
-      const router = await tx.router.findFirst({ where: { status: { not: 'OFFLINE' } }, orderBy: { createdAt: 'asc' } });
+      // Router MUST belong to the customer's tenant — never provision one
+      // company's subscriber onto another company's hardware (autopsy F1).
+      const router = await tx.router.findFirst({
+        where: { tenantId: customer.tenantId, status: { not: 'OFFLINE' } },
+        orderBy: { createdAt: 'asc' },
+      });
       const device = await tx.device.findFirst({
         where: { customerId: customerId },
         orderBy: { lastSeenAt: 'desc' },
@@ -190,6 +205,7 @@ export async function activateOnPaymentSuccess(
 
     await tx.auditLog.create({
       data: {
+        tenantId: customer.tenantId,
         actorType: 'SYSTEM',
         action: 'PAYMENT_CONFIRMED',
         resourceType: 'Payment',

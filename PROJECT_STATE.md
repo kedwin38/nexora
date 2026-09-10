@@ -6,9 +6,15 @@ Live project status. Read this first when resuming work. Update after every chec
 
 ## CurrentObjectives
 
+- **Full-system autopsy complete — all findings fixed** (see
+  docs/AUTOPSY_FIXES.md). Network provisioning/reconciliation is now
+  tenant-scoped (F1/F2); webhook parses real Daraja regardless of platform
+  default (F3); double-activation race closed (F4); suspended tenants refused +
+  sessions revoked (F5); status filters validated (F6); signup off by default
+  (F7); AuditLog tenant-scoped (F10).
 - **Multi-tenancy + platform owner + full M-Pesa lifecycle SHIPPED.** Unit
-  178/178 · E2E 48/48 (incl. company signup, tenant isolation, platform
-  owner, paybill/till, payment cancel + timeout) · lint clean · typecheck clean.
+  178/178 · **E2E 56/56** (adds provisioning isolation, real-Daraja parse,
+  suspension, concurrent-activation) · chaos/security 15/15 · lint + typecheck clean.
 - Companies self-signup and are isolated; each brings its own paybill/till and
   encrypted Daraja credentials (ADR-013). Platform owner governs all tenants
   (`/api/v1/platform/*`). No payment is left hanging — reconciliation closes

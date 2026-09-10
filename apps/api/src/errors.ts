@@ -73,6 +73,7 @@ function mapCodeToStatus(code: string): number {
     case 'UNAUTHORIZED':
       return 401;
     case 'FORBIDDEN':
+    case 'TENANT_UNAVAILABLE':
       return 403;
     case 'NOT_FOUND':
       return 404;

@@ -800,6 +800,10 @@ model Job {
 /// and is null for system/worker actors (polymorphic, deliberately unenforced by FK).
 model AuditLog {
   id             String      @id @default(uuid())
+  /// Tenant the audited action belongs to. Null for platform-global actions
+  /// (system start/shutdown, cross-tenant owner actions). Company admins are
+  /// scoped to their own tenantId; the platform owner sees all.
+  tenantId       String?
   actorId        String?
   actorType      String // USER | CUSTOMER | SYSTEM | WORKER
   user           User?       @relation(fields: [actorId], references: [id])
@@ -815,6 +819,7 @@ model AuditLog {
 
   @@index([resourceType, resourceId, createdAt])
   @@index([actorType, actorId])
+  @@index([tenantId, createdAt])
   @@index([correlationId])
 }
 

@@ -123,7 +123,7 @@ export async function runFupEvaluationCycle(prisma: PrismaClient): Promise<FupCy
         });
 
         const router = await tx.router.findFirst({
-          where: { status: { not: 'OFFLINE' } },
+          where: { tenantId: fup.subscription.tenantId, status: { not: 'OFFLINE' } },
           orderBy: { createdAt: 'asc' },
         });
         if (router !== null) {

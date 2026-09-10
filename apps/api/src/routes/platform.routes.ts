@@ -179,6 +179,14 @@ export async function registerPlatformRoutes(app: FastifyInstance, nexora: Nexor
         });
       }
       await nexora.prisma.tenant.update({ where: { id: request.params.id }, data: { status: parsed.data.status } });
+      // Suspending/closing a company must lock its staff out immediately — not
+      // wait for token TTL (autopsy F5).
+      if (parsed.data.status === 'SUSPENDED' || parsed.data.status === 'CLOSED') {
+        await nexora.prisma.userSession.updateMany({
+          where: { user: { tenantId: request.params.id }, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
       await createOutboxEvent(nexora, {
         eventType: parsed.data.status === 'SUSPENDED' ? 'TENANT_SUSPENDED' : 'TENANT_ACTIVATED',
         aggregateType: 'Tenant',

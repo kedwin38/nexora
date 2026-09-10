@@ -19,7 +19,7 @@
 import type { FastifyInstance } from 'fastify';
 import { paymentMachine } from '@nexora/domain';
 import { activateOnPaymentSuccess } from '@nexora/engines';
-import { classifyStkResultCode } from '@nexora/payment-sdk';
+import { classifyStkResultCode, parseStkCallback } from '@nexora/payment-sdk';
 import type { NexoraContext } from '../context.js';
 
 export async function registerWebhookRoutes(app: FastifyInstance, nexora: NexoraContext): Promise<void> {
@@ -29,7 +29,11 @@ export async function registerWebhookRoutes(app: FastifyInstance, nexora: Nexora
     async (request, reply) => {
       let callback;
       try {
-        callback = await nexora.payments.parseCallback(request.body, request.headers);
+        // Parse the real Daraja shape directly — it needs no credentials, so a
+        // real callback is confirmed even when the PLATFORM default provider is
+        // `mock` while tenants collect through their own Daraja app (autopsy F3).
+        // Fall back to the configured provider's parser for dev/mock bodies.
+        callback = parseStkCallback(request.body) ?? (await nexora.payments.parseCallback(request.body, request.headers));
       } catch (error) {
         nexora.logger.warn('M-Pesa callback unparseable', {
           correlationId: request.id,

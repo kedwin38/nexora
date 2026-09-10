@@ -16,6 +16,7 @@ import { normalizeKenyanMsisdn } from '@nexora/payment-sdk';
 import type { NexoraContext } from '../context.js';
 import { createOutboxEvent } from '../outbox.js';
 import { resolveTenantId } from '../tenant.js';
+import { STK_DEADLINE_MS } from './payment.routes.js';
 
 const purchaseSchema = z.object({
   phone: z.string(),
@@ -124,7 +125,7 @@ export async function registerGuestRoutes(app: FastifyInstance, nexora: NexoraCo
           currency: pkg.currency,
           status: 'INITIATED',
           phoneNumber: phone,
-          deadlineAt: new Date(Date.now() + 3 * 60_000),
+          deadlineAt: new Date(Date.now() + STK_DEADLINE_MS),
           correlationId: request.id,
         },
       });

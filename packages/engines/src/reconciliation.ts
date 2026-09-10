@@ -26,7 +26,13 @@ export async function runReconciliationCycle(
   let drifted = 0;
   let repaired = 0;
 
+  // Only reconcile subscribers of THIS router's tenant — never drive one
+  // company's router with another company's desired state (autopsy F2).
+  const router = await prisma.router.findUnique({ where: { id: routerId }, select: { tenantId: true } });
+  if (router === null) return { routerId, checked, drifted, repaired, unreachable: false };
+
   const policies = await prisma.networkPolicy.findMany({
+    where: { subscription: { tenantId: router.tenantId } },
     include: { subscription: true },
     take: 200,
   });

@@ -53,6 +53,10 @@ export function scheduleMockAutoConfirm(
   }, delay).unref();
 }
 
+/** How long a PENDING STK push may wait before reconciliation expires it.
+ *  M-Pesa prompts lapse after ~60s; we allow generous slack for callback lag. */
+const STK_DEADLINE_MS = 3 * 60_000;
+
 const initiateSchema = z.object({
   packageId: z.string().uuid(),
   phone: z.string().optional(),
@@ -90,11 +94,12 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
         throw new ValidationError('Invalid Kenyan phone number.', undefined, request.id);
       }
 
+      const tenantId = customer.tenantId;
       const pkg = await nexora.prisma.package.findUnique({
         where: { id: input.packageId },
         include: { policy: true },
       });
-      if (pkg === null || pkg.status !== 'ACTIVE') {
+      if (pkg === null || pkg.status !== 'ACTIVE' || pkg.tenantId !== tenantId) {
         throw new NotFoundError('Package', input.packageId, request.id);
       }
 
@@ -111,9 +116,12 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
         });
       }
 
-      // Reserve the payment row BEFORE the provider call (INITIATED).
+      // Reserve the payment row BEFORE the provider call (INITIATED). The
+      // deadline bounds how long a PENDING payment may wait before the
+      // reconciliation sweep closes it out (EXPIRED) — no payment hangs.
       const payment = await nexora.prisma.payment.create({
         data: {
+          tenantId,
           provider: 'MPESA',
           clientReference: input.idempotencyKey,
           customerId,
@@ -123,6 +131,7 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
           currency: pkg.currency,
           status: 'INITIATED',
           phoneNumber: phone,
+          deadlineAt: new Date(Date.now() + STK_DEADLINE_MS),
           correlationId: request.id,
         },
       });
@@ -138,7 +147,8 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
 
       let providerTransactionId: string;
       try {
-        const push = await nexora.payments.initiateStkPush({
+        const provider = await nexora.paymentsFor(tenantId);
+        const push = await provider.initiateStkPush({
           phoneNumber: phone,
           amountMinor: pkg.priceMinor,
           accountReference: 'NEXORA',

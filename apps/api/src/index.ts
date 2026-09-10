@@ -14,7 +14,8 @@ import cors from '@fastify/cors';
 import { apiEnvSchema, mpesaEnvSchema, parseEnv } from '@nexora/config';
 import { createLogger } from '@nexora/logging';
 import { Argon2PasswordHasher, HmacTokenService } from '@nexora/auth';
-import { MockPaymentProvider, MpesaDarajaProvider } from '@nexora/payment-sdk';
+import { MockPaymentProvider, MpesaDarajaProvider, type PaymentProvider } from '@nexora/payment-sdk';
+import { createTenantPaymentResolver } from '@nexora/engines';
 import { MikroTikAdapter, MockRouterAdapter, type RouterAdapter } from '@nexora/router-sdk';
 import { createPrismaClient, disposePrismaClient } from '@nexora/db';
 import { registerHealthRoutes } from './health.js';
@@ -31,6 +32,8 @@ import { registerAdminPackageRoutes } from './routes/admin-packages.routes.js';
 import { registerAdminUserRoutes } from './routes/admin-users.routes.js';
 import { registerAdminOpsRoutes } from './routes/admin-ops.routes.js';
 import { registerGuestRoutes } from './routes/guest.routes.js';
+import { registerTenantRoutes } from './routes/tenant.routes.js';
+import { registerPlatformRoutes } from './routes/platform.routes.js';
 import { prismaSessionStore } from './session-store.js';
 import type { NexoraContext } from './context.js';
 
@@ -66,17 +69,30 @@ async function main(): Promise<void> {
     ttlSeconds: env.SESSION_TTL_HOURS * 3600,
   });
 
-  const payments =
-    env.PAYMENT_PROVIDER === 'mpesa'
-      ? new MpesaDarajaProvider({
-          env: parseEnv(mpesaEnvSchema).MPESA_ENV,
-          consumerKey: parseEnv(mpesaEnvSchema).MPESA_CONSUMER_KEY,
-          consumerSecret: parseEnv(mpesaEnvSchema).MPESA_CONSUMER_SECRET,
-          shortcode: parseEnv(mpesaEnvSchema).MPESA_SHORTCODE,
-          passkey: parseEnv(mpesaEnvSchema).MPESA_PASSKEY,
-          callbackUrl: parseEnv(mpesaEnvSchema).MPESA_CALLBACK_URL,
-        })
-      : new MockPaymentProvider();
+  const payments: PaymentProvider = ((): PaymentProvider => {
+    if (env.PAYMENT_PROVIDER !== 'mpesa') return new MockPaymentProvider();
+    const mpesa = parseEnv(mpesaEnvSchema);
+    return new MpesaDarajaProvider({
+      env: mpesa.MPESA_ENV,
+      consumerKey: mpesa.MPESA_CONSUMER_KEY,
+      consumerSecret: mpesa.MPESA_CONSUMER_SECRET,
+      shortcode: mpesa.MPESA_SHORTCODE,
+      channel: mpesa.MPESA_CHANNEL,
+      ...(mpesa.MPESA_PARTY_B !== undefined ? { partyB: mpesa.MPESA_PARTY_B } : {}),
+      passkey: mpesa.MPESA_PASSKEY,
+      callbackUrl: mpesa.MPESA_CALLBACK_URL,
+    });
+  })();
+
+  // Per-tenant provider resolution: a company with its own M-Pesa config
+  // collects through its own paybill/till; everyone else uses `payments`.
+  const tenantResolver = createTenantPaymentResolver(prisma, {
+    fallback: payments,
+    masterKey: env.CREDENTIALS_ENCRYPTION_KEY,
+    defaultCallbackUrl: env.PUBLIC_BASE_URL !== undefined ? `${env.PUBLIC_BASE_URL}/api/v1/webhooks/mpesa` : undefined,
+  });
+  const paymentsFor = async (tenantId: string): Promise<PaymentProvider> =>
+    (await tenantResolver({ tenantId, provider: 'MPESA' })) ?? payments;
 
   const mockRouter = env.ROUTER_ADAPTER === 'mock' ? new MockRouterAdapter() : null;
   const routers: NexoraContext['routers'] = {
@@ -102,7 +118,7 @@ async function main(): Promise<void> {
 
   const metrics = createMetrics(prisma);
 
-  const nexora: NexoraContext = { env, logger, prisma, hasher, tokens, payments, metrics, routers };
+  const nexora: NexoraContext = { env, logger, prisma, hasher, tokens, payments, paymentsFor, metrics, routers };
 
   // ---- HTTP server ----
   const app = Fastify({
@@ -167,6 +183,8 @@ async function main(): Promise<void> {
   await registerAdminUserRoutes(app, nexora);
   await registerAdminOpsRoutes(app, nexora);
   await registerGuestRoutes(app, nexora);
+  await registerTenantRoutes(app, nexora);
+  await registerPlatformRoutes(app, nexora);
 
   // ---- Interim operator portal (Stage 7 replaces this with apps/web) ----
   const portalHtml = await loadPortalHtml();

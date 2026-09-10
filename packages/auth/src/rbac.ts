@@ -7,6 +7,7 @@
  */
 
 export const ROLES = [
+  'PLATFORM_OWNER',
   'SUPER_ADMIN',
   'NETWORK_ADMIN',
   'BILLING_ADMIN',
@@ -55,12 +56,23 @@ export const PERMISSIONS = [
   'audit.read',
   'system.manage',
   'monitoring.read',
+  // Tenant self-service (a company's own settings, within its own tenant)
+  'tenant.read',
+  'tenant.manage',
+  // Platform governance (cross-tenant — PLATFORM_OWNER only)
+  'platform.read',
+  'platform.manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  SUPER_ADMIN: PERMISSIONS,
+  // The platform owner governs the whole estate: every tenant-scoped
+  // permission PLUS cross-tenant platform governance.
+  PLATFORM_OWNER: PERMISSIONS,
+  // A company super-admin has every tenant-scoped permission but NEVER
+  // platform.* — they cannot see or touch other companies.
+  SUPER_ADMIN: PERMISSIONS.filter((p) => !p.startsWith('platform.')),
   NETWORK_ADMIN: [
     'customer.read',
     'subscription.read',

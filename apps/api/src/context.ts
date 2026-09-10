@@ -17,7 +17,10 @@ export interface NexoraContext {
   readonly prisma: PrismaClient;
   readonly hasher: PasswordHasher;
   readonly tokens: TokenService;
+  /** Platform-default payment provider (mock or env-configured Daraja). */
   readonly payments: PaymentProvider;
+  /** Resolves the provider a given tenant collects through (own paybill/till). */
+  readonly paymentsFor: (tenantId: string) => Promise<PaymentProvider>;
   readonly metrics: ApiMetrics;
   /** Router adapter factory — network ops run in network-worker, but the API
    * exposes admin health/sync triggers that need an adapter too. */

@@ -10,3 +10,6 @@ logs/
 .DS_Store
 /generated/
 *.tsbuildinfo
+
+# Next.js build output (was previously committed by mistake)
+.next/

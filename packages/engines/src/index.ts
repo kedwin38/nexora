@@ -5,3 +5,4 @@ export * from './reconciliation.js';
 export * from './notifications.js';
 export * from './activation.js';
 export * from './payment-reconciliation.js';
+export * from './payment-provider-resolver.js';

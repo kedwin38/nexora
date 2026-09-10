@@ -4,11 +4,13 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { NexoraContext } from '../context.js';
+import { resolveTenantId } from '../tenant.js';
 
 export async function registerPackageRoutes(app: FastifyInstance, nexora: NexoraContext): Promise<void> {
-  app.get('/api/v1/packages', async (_request, reply) => {
+  app.get('/api/v1/packages', async (request, reply) => {
+    const tenantId = await resolveTenantId(nexora, request);
     const packages = await nexora.prisma.package.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', tenantId },
       orderBy: { displayOrder: 'asc' },
       select: {
         id: true,

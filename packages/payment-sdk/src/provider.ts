@@ -24,10 +24,19 @@ export interface StkPushResponse {
   readonly accepted: boolean;
 }
 
+/** How a non-success terminal query should be recorded. */
+export type PaymentTerminalOutcome = 'CANCELLED' | 'TIMEOUT' | 'FAILED';
+
 export type ProviderQueryResult =
   | { readonly status: 'SUCCESS'; readonly providerTransactionId: string; readonly receipt: string }
   | { readonly status: 'PENDING' }
-  | { readonly status: 'FAILED'; readonly providerTransactionId: string; readonly reason: string };
+  | {
+      readonly status: 'FAILED';
+      readonly providerTransactionId: string;
+      readonly reason: string;
+      /** Distinguishes user-cancel and timeout from a generic failure. */
+      readonly outcome?: PaymentTerminalOutcome;
+    };
 
 export interface CallbackPayload {
   readonly providerTransactionId: string;

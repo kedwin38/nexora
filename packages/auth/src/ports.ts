@@ -19,6 +19,8 @@ export interface TokenPayload {
   readonly subjectType: 'user' | 'customer';
   readonly subjectId: string;
   readonly role: string;
+  /** Tenant (company) the subject belongs to. Absent tokens resolve to 'default'. */
+  readonly tenantId?: string;
 }
 
 export interface IssueMeta {

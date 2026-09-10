@@ -9,8 +9,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@nexora/auth": "*",
     "@nexora/db": "*",
     "@nexora/domain": "*",
+    "@nexora/payment-sdk": "*",
     "@nexora/router-sdk": "*"
   }
 }

@@ -56,6 +56,8 @@ async function main(): Promise<void> {
       ['usage-sync', '*/1 * * * *'],
       ['network-reconciliation', '*/5 * * * *'],
       ['router-health', '*/1 * * * *'],
+      // Closes out stale/cancelled/timed-out payments — no payment left hanging (§16).
+      ['payment-reconciliation', '*/2 * * * *'],
     ];
     for (const [type, cron] of types) {
       if (!running) break;

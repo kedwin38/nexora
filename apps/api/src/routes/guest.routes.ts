@@ -15,6 +15,7 @@ import { NotFoundError, ValidationError } from '@nexora/domain';
 import { normalizeKenyanMsisdn } from '@nexora/payment-sdk';
 import type { NexoraContext } from '../context.js';
 import { createOutboxEvent } from '../outbox.js';
+import { resolveTenantId } from '../tenant.js';
 
 const purchaseSchema = z.object({
   phone: z.string(),
@@ -47,20 +48,22 @@ export async function registerGuestRoutes(app: FastifyInstance, nexora: NexoraCo
       if (phone === null) {
         throw new ValidationError('Invalid Kenyan phone number.', undefined, request.id);
       }
+      const tenantId = await resolveTenantId(nexora, request);
       const pkg = await nexora.prisma.package.findUnique({ where: { id: input.packageId } });
-      if (pkg === null || pkg.status !== 'ACTIVE') {
+      if (pkg === null || pkg.status !== 'ACTIVE' || pkg.tenantId !== tenantId) {
         throw new NotFoundError('Package', input.packageId, request.id);
       }
 
       // Guest identity: one GUEST customer per phone (upgradeable later to
       // REGISTERED when they create a password — §8.1 account_type).
-      const existing = await nexora.prisma.customer.findFirst({ where: { phoneNumber: phone, tenantId: 'default' } });
+      const existing = await nexora.prisma.customer.findFirst({ where: { phoneNumber: phone, tenantId } });
       const customer =
         existing !== null
           ? existing
           : await nexora.prisma.customer.create({
               data: {
                 customerNumber: `GST-${Date.now().toString(36).toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}`,
+                tenantId,
                 accountType: 'GUEST',
                 status: 'ACTIVE',
                 phoneNumber: phone,
@@ -111,6 +114,7 @@ export async function registerGuestRoutes(app: FastifyInstance, nexora: NexoraCo
 
       const payment = await nexora.prisma.payment.create({
         data: {
+          tenantId,
           provider: 'MPESA',
           clientReference: idempotencyKey,
           customerId: customer.id,
@@ -120,13 +124,15 @@ export async function registerGuestRoutes(app: FastifyInstance, nexora: NexoraCo
           currency: pkg.currency,
           status: 'INITIATED',
           phoneNumber: phone,
+          deadlineAt: new Date(Date.now() + 3 * 60_000),
           correlationId: request.id,
         },
       });
 
       let providerTransactionId: string;
       try {
-        const push = await nexora.payments.initiateStkPush({
+        const provider = await nexora.paymentsFor(tenantId);
+        const push = await provider.initiateStkPush({
           phoneNumber: phone,
           amountMinor: pkg.priceMinor,
           accountReference: 'NEXORA',

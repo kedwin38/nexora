@@ -13,16 +13,18 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
   app.get(
     '/api/v1/admin/summary',
     { preHandler: [app.requirePermission('monitoring.read')] },
-    async (_request, reply) => {
-      const [customers, activeSubscriptions, paymentsSuccess, revenue, pendingPayments, queuedOps, drift] =
+    async (request, reply) => {
+      const tenantId = request.principal!.tenantId;
+      const [customers, activeSubscriptions, paymentsSuccess, revenue, pendingPayments, unresolvedPayments, queuedOps, drift] =
         await Promise.all([
-          nexora.prisma.customer.count(),
-          nexora.prisma.subscription.count({ where: { status: { in: ['ACTIVE', 'FUP'] } } }),
-          nexora.prisma.payment.count({ where: { status: 'SUCCESS' } }),
-          nexora.prisma.payment.aggregate({ where: { status: 'SUCCESS' }, _sum: { amountMinor: true } }),
-          nexora.prisma.payment.count({ where: { status: 'PENDING' } }),
-          nexora.prisma.networkOperation.count({ where: { status: { in: ['QUEUED', 'PROCESSING', 'RETRYING'] } } }),
-          nexora.prisma.networkOperation.count({ where: { status: 'PERMANENT_FAILURE' } }),
+          nexora.prisma.customer.count({ where: { tenantId } }),
+          nexora.prisma.subscription.count({ where: { tenantId, status: { in: ['ACTIVE', 'FUP'] } } }),
+          nexora.prisma.payment.count({ where: { tenantId, status: 'SUCCESS' } }),
+          nexora.prisma.payment.aggregate({ where: { tenantId, status: 'SUCCESS' }, _sum: { amountMinor: true } }),
+          nexora.prisma.payment.count({ where: { tenantId, status: 'PENDING' } }),
+          nexora.prisma.payment.count({ where: { tenantId, status: { in: ['CANCELLED', 'EXPIRED', 'FAILED'] } } }),
+          nexora.prisma.networkOperation.count({ where: { router: { tenantId }, status: { in: ['QUEUED', 'PROCESSING', 'RETRYING'] } } }),
+          nexora.prisma.networkOperation.count({ where: { router: { tenantId }, status: 'PERMANENT_FAILURE' } }),
         ]);
 
       return await reply.status(200).send({
@@ -32,6 +34,7 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
           paymentsSuccess,
           revenueMinor: revenue._sum.amountMinor ?? 0,
           pendingPayments,
+          unresolvedPayments,
           queuedNetworkOperations: queuedOps,
           failedNetworkOperations: drift,
         },
@@ -45,8 +48,10 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
     async (request, reply) => {
       const page = Math.max(1, Number(request.query.page ?? 1));
       const limit = Math.min(100, Math.max(1, Number(request.query.limit ?? 20)));
+      const tenantId = request.principal!.tenantId;
       const [customers, total] = await Promise.all([
         nexora.prisma.customer.findMany({
+          where: { tenantId },
           orderBy: { createdAt: 'desc' },
           skip: (page - 1) * limit,
           take: limit,
@@ -65,7 +70,7 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
             },
           },
         }),
-        nexora.prisma.customer.count(),
+        nexora.prisma.customer.count({ where: { tenantId } }),
       ]);
 
       return await reply.status(200).send({
@@ -100,7 +105,11 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
     async (request, reply) => {
       const page = Math.max(1, Number(request.query.page ?? 1));
       const limit = Math.min(100, Math.max(1, Number(request.query.limit ?? 20)));
-      const where = request.query.status !== undefined ? { status: request.query.status as never } : {};
+      const tenantId = request.principal!.tenantId;
+      const where = {
+        tenantId,
+        ...(request.query.status !== undefined ? { status: request.query.status as never } : {}),
+      };
       const [payments, total] = await Promise.all([
         nexora.prisma.payment.findMany({
           where,
@@ -140,7 +149,11 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
     async (request, reply) => {
       const page = Math.max(1, Number(request.query.page ?? 1));
       const limit = Math.min(100, Math.max(1, Number(request.query.limit ?? 20)));
-      const where = request.query.status !== undefined ? { status: request.query.status as never } : {};
+      const tenantId = request.principal!.tenantId;
+      const where = {
+        router: { tenantId },
+        ...(request.query.status !== undefined ? { status: request.query.status as never } : {}),
+      };
       const [operations, total] = await Promise.all([
         nexora.prisma.networkOperation.findMany({
           where,
@@ -177,7 +190,9 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
     '/api/v1/admin/network-operations/:id/retry',
     { preHandler: [app.requirePermission('network_operation.retry')] },
     async (request, reply) => {
-      const op = await nexora.prisma.networkOperation.findUnique({ where: { id: request.params.id } });
+      const op = await nexora.prisma.networkOperation.findFirst({
+        where: { id: request.params.id, router: { tenantId: request.principal!.tenantId } },
+      });
       if (op === null) {
         return await reply.status(404).send({
           error: { code: 'NOT_FOUND', message: 'Network operation not found.', correlationId: request.id, retryable: false },
@@ -208,13 +223,25 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
     async (request, reply) => {
       const page = Math.max(1, Number((request.query as Record<string, string | undefined>).page ?? 1));
       const limit = Math.min(100, Math.max(1, Number((request.query as Record<string, string | undefined>).limit ?? 20)));
+      const tenantId = request.principal!.tenantId;
+      // A company admin sees audit entries authored by their own staff plus
+      // system/worker actions (which bear no actor). The platform owner, on
+      // the 'platform' tenant, additionally sees platform-level actions.
+      const tenantUserIds = (
+        await nexora.prisma.user.findMany({ where: { tenantId }, select: { id: true } })
+      ).map((u) => u.id);
+      const where =
+        request.principal!.role === 'PLATFORM_OWNER'
+          ? {}
+          : { OR: [{ actorId: { in: tenantUserIds } }, { actorType: { in: ['SYSTEM', 'WORKER'] } }] };
       const [logs, total] = await Promise.all([
         nexora.prisma.auditLog.findMany({
+          where,
           orderBy: { createdAt: 'desc' },
           skip: (page - 1) * limit,
           take: limit,
         }),
-        nexora.prisma.auditLog.count(),
+        nexora.prisma.auditLog.count({ where }),
       ]);
       return await reply.status(200).send({ data: logs, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) });
     },
@@ -225,9 +252,10 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
   app.get(
     '/api/v1/admin/sessions',
     { preHandler: [app.requirePermission('session.read')] },
-    async (_request, reply) => {
+    async (request, reply) => {
+      const tenantId = request.principal!.tenantId;
       const sessions = await nexora.prisma.customerSession.findMany({
-        where: { status: { in: ['ONLINE', 'THROTTLED', 'AUTHORIZED'] } },
+        where: { status: { in: ['ONLINE', 'THROTTLED', 'AUTHORIZED'] }, customer: { tenantId } },
         orderBy: { lastSeenAt: 'desc' },
         take: 100,
         select: {
@@ -265,8 +293,9 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
     '/api/v1/admin/sessions/:id/disconnect',
     { preHandler: [app.requirePermission('session.disconnect')] },
     async (request, reply) => {
-      const session = await nexora.prisma.customerSession.findUnique({
-        where: { id: request.params.id },
+      const tenantId = request.principal!.tenantId;
+      const session = await nexora.prisma.customerSession.findFirst({
+        where: { id: request.params.id, customer: { tenantId } },
         include: { subscription: { include: { networkPolicy: true } } },
       });
       if (session === null) {
@@ -274,7 +303,7 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
           error: { code: 'NOT_FOUND', message: 'Session not found.', correlationId: request.id, retryable: false },
         });
       }
-      const router = await nexora.prisma.router.findFirst({ where: { status: { not: 'OFFLINE' } } });
+      const router = await nexora.prisma.router.findFirst({ where: { tenantId, status: { not: 'OFFLINE' } } });
       const desired = session.subscription.networkPolicy?.desiredState as
         | { macAddress: string | null; authorized: boolean; rateLimit: { downloadKbps: number; uploadKbps: number } | null }
         | undefined;
@@ -322,6 +351,15 @@ export async function registerAdminRoutes(app: FastifyInstance, nexora: NexoraCo
     '/api/v1/admin/subscriptions/:id/fup-reset',
     { preHandler: [app.requirePermission('fup.reset')] },
     async (request, reply) => {
+      const owned = await nexora.prisma.subscription.findFirst({
+        where: { id: request.params.id, tenantId: request.principal!.tenantId },
+        select: { id: true },
+      });
+      if (owned === null) {
+        return await reply.status(404).send({
+          error: { code: 'NOT_FOUND', message: 'Subscription not found.', correlationId: request.id, retryable: false },
+        });
+      }
       try {
         await resetFupForSubscription(nexora.prisma, request.params.id, request.id);
       } catch (error) {

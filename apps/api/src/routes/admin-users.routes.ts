@@ -38,8 +38,9 @@ export async function registerAdminUserRoutes(app: FastifyInstance, nexora: Nexo
   app.get(
     '/api/v1/admin/users',
     { preHandler: [app.requirePermission('user.read')] },
-    async (_request, reply) => {
+    async (request, reply) => {
       const users = await nexora.prisma.user.findMany({
+        where: { tenantId: request.principal!.tenantId },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -87,6 +88,12 @@ export async function registerAdminUserRoutes(app: FastifyInstance, nexora: Nexo
     { preHandler: [app.requirePermission('user.write')] },
     async (request, reply) => {
       const input = parseOrThrow(userCreateSchema, request.body, request.id);
+      // Only the platform owner may mint another PLATFORM_OWNER.
+      if (input.role === 'PLATFORM_OWNER' && request.principal!.role !== 'PLATFORM_OWNER') {
+        return await reply.status(403).send({
+          error: { code: 'FORBIDDEN', message: 'Cannot assign the PLATFORM_OWNER role.', correlationId: request.id, retryable: false },
+        });
+      }
       const existing = await nexora.prisma.user.findUnique({ where: { email: input.email } });
       if (existing !== null) {
         return await reply.status(409).send({
@@ -98,7 +105,7 @@ export async function registerAdminUserRoutes(app: FastifyInstance, nexora: Nexo
 
       const passwordHash = await nexora.hasher.hash(input.password);
       const user = await nexora.prisma.user.create({
-        data: { email: input.email, passwordHash, displayName: input.displayName, roleId: role.id },
+        data: { tenantId: request.principal!.tenantId, email: input.email, passwordHash, displayName: input.displayName, roleId: role.id },
       });
       await writeAudit(nexora, {
         action: 'USER_CREATED',
@@ -118,8 +125,15 @@ export async function registerAdminUserRoutes(app: FastifyInstance, nexora: Nexo
     { preHandler: [app.requirePermission('user.write')] },
     async (request, reply) => {
       const input = parseOrThrow(userUpdateSchema, request.body, request.id);
+      if (input.role === 'PLATFORM_OWNER' && request.principal!.role !== 'PLATFORM_OWNER') {
+        return await reply.status(403).send({
+          error: { code: 'FORBIDDEN', message: 'Cannot assign the PLATFORM_OWNER role.', correlationId: request.id, retryable: false },
+        });
+      }
       const user = await nexora.prisma.user.findUnique({ where: { id: request.params.id }, include: { role: true } });
-      if (user === null) throw new NotFoundError('User', request.params.id, request.id);
+      if (user === null || user.tenantId !== request.principal!.tenantId) {
+        throw new NotFoundError('User', request.params.id, request.id);
+      }
 
       const before = { role: user.role.name, status: user.status, displayName: user.displayName };
       const roleId = input.role !== undefined
@@ -170,7 +184,9 @@ export async function registerAdminUserRoutes(app: FastifyInstance, nexora: Nexo
     { preHandler: [app.requirePermission('user.write')] },
     async (request, reply) => {
       const user = await nexora.prisma.user.findUnique({ where: { id: request.params.id } });
-      if (user === null) throw new NotFoundError('User', request.params.id, request.id);
+      if (user === null || user.tenantId !== request.principal!.tenantId) {
+        throw new NotFoundError('User', request.params.id, request.id);
+      }
       const result = await nexora.prisma.userSession.updateMany({
         where: { userId: user.id, revokedAt: null },
         data: { revokedAt: new Date() },

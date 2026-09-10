@@ -19,6 +19,7 @@ export const EVENT_TYPES = [
   'PAYMENT_CONFIRMED',
   'PAYMENT_FAILED',
   'PAYMENT_CANCELLED',
+  'PAYMENT_EXPIRED',
   'PAYMENT_REVERSED',
   'PAYMENT_REFUNDED',
   // Subscriptions
@@ -51,6 +52,11 @@ export const EVENT_TYPES = [
   // Admin & audit
   'ADMIN_ACTION_PERFORMED',
   'ROLE_ASSIGNED',
+  // Tenants (companies)
+  'TENANT_CREATED',
+  'TENANT_SUSPENDED',
+  'TENANT_ACTIVATED',
+  'TENANT_PAYMENT_CONFIGURED',
   // System
   'SYSTEM_STARTED',
   'SYSTEM_SHUTDOWN',

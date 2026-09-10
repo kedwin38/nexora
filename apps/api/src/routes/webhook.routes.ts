@@ -19,6 +19,7 @@
 import type { FastifyInstance } from 'fastify';
 import { paymentMachine } from '@nexora/domain';
 import { activateOnPaymentSuccess } from '@nexora/engines';
+import { classifyStkResultCode } from '@nexora/payment-sdk';
 import type { NexoraContext } from '../context.js';
 
 export async function registerWebhookRoutes(app: FastifyInstance, nexora: NexoraContext): Promise<void> {
@@ -51,20 +52,24 @@ export async function registerWebhookRoutes(app: FastifyInstance, nexora: Nexora
           return await reply.status(200).send({ received: true });
         }
 
-        // Idempotent replay: already terminal with the same receipt.
-        if (payment.status === 'SUCCESS') {
-          nexora.logger.info('Duplicate M-Pesa callback acknowledged (no-op)', { correlationId });
+        // Idempotent replay: already terminal (SUCCESS or any closed-out state).
+        if (payment.status === 'SUCCESS' || payment.status === 'CANCELLED' || payment.status === 'EXPIRED') {
+          nexora.logger.info('Duplicate/terminal M-Pesa callback acknowledged (no-op)', { correlationId, status: payment.status });
           return await reply.status(200).send({ received: true });
         }
 
         if (callback.resultCode !== 0) {
-          // Failed / cancelled by user.
-          paymentMachine.assertTransition(payment.status, 'FAILED');
+          // Classify the failure precisely so nothing is left ambiguous:
+          //   1032 -> CANCELLED (user declined)   timeout codes -> EXPIRED   else -> FAILED.
+          const outcome = classifyStkResultCode(callback.resultCode);
+          const status = outcome === 'CANCELLED' ? 'CANCELLED' : outcome === 'TIMEOUT' ? 'EXPIRED' : 'FAILED';
+          const eventType = status === 'CANCELLED' ? 'PAYMENT_CANCELLED' : status === 'EXPIRED' ? 'PAYMENT_EXPIRED' : 'PAYMENT_FAILED';
+          paymentMachine.assertTransition(payment.status, status);
           await nexora.prisma.$transaction(async (tx) => {
             await tx.payment.update({
               where: { id: payment.id },
               data: {
-                status: 'FAILED',
+                status,
                 failureReason: callback.resultDesc.slice(0, 500),
                 completedAt: new Date(),
               },
@@ -78,14 +83,15 @@ export async function registerWebhookRoutes(app: FastifyInstance, nexora: Nexora
             });
             await tx.outboxEvent.create({
               data: {
-                eventType: 'PAYMENT_FAILED',
+                eventType,
                 aggregateType: 'Payment',
                 aggregateId: payment.id,
-                payload: { paymentId: payment.id, resultCode: callback.resultCode },
+                payload: { paymentId: payment.id, resultCode: callback.resultCode, status },
                 correlationId,
               },
             });
           });
+          nexora.metrics.paymentOutcome('failed');
           return await reply.status(200).send({ received: true });
         }
 

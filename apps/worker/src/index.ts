@@ -12,6 +12,7 @@ import { createLogger, type Logger } from '@nexora/logging';
 import { createPrismaClient, disposePrismaClient, type PrismaClient } from '@nexora/db';
 import {
   createNotificationsFromOutbox,
+  createTenantPaymentResolver,
   deliverPendingNotifications,
   LogNotificationSender,
   runExpiryCycle,
@@ -35,6 +36,8 @@ function buildPaymentProvider(): PaymentProvider {
       consumerKey: env.MPESA_CONSUMER_KEY,
       consumerSecret: env.MPESA_CONSUMER_SECRET,
       shortcode: env.MPESA_SHORTCODE,
+      channel: env.MPESA_CHANNEL,
+      ...(env.MPESA_PARTY_B !== undefined ? { partyB: env.MPESA_PARTY_B } : {}),
       passkey: env.MPESA_PASSKEY,
       callbackUrl: env.MPESA_CALLBACK_URL,
     });
@@ -80,8 +83,13 @@ async function executeJob(prisma: PrismaClient, logger: Logger, job: { id: strin
         break;
       }
       case 'payment-reconciliation': {
-        const summary = await runPaymentReconciliation(prisma, buildPaymentProvider());
-        result = `checked=${summary.checked} confirmed=${summary.confirmed} failed=${summary.failed} pending=${summary.stillPending} errors=${summary.providerErrors}`;
+        const resolver = createTenantPaymentResolver(prisma, {
+          fallback: buildPaymentProvider(),
+          masterKey: process.env.CREDENTIALS_ENCRYPTION_KEY,
+          defaultCallbackUrl: process.env.MPESA_CALLBACK_URL,
+        });
+        const summary = await runPaymentReconciliation(prisma, resolver);
+        result = `checked=${summary.checked} confirmed=${summary.confirmed} failed=${summary.failed} cancelled=${summary.cancelled} expired=${summary.expired} pending=${summary.stillPending} errors=${summary.providerErrors}`;
         break;
       }
       default:

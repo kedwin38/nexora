@@ -93,6 +93,7 @@ export async function activateOnPaymentSuccess(
       const created = await tx.subscription.create({
         data: {
           subscriptionNumber: `SUB-${now.getTime().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+          tenantId: customer.tenantId,
           customerId: customerId,
           packageId: pkg.id,
           packageVersion: pkg.version,

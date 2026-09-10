@@ -13,6 +13,39 @@ import { PERMISSIONS, ROLES, ROLE_PERMISSIONS } from '@nexora/auth';
 
 const prisma = new PrismaClient();
 
+async function seedTenants(): Promise<void> {
+  // Reserved tenants. `default` is the reference ISP used by tests and
+  // single-tenant deployments; `platform` hosts the PLATFORM_OWNER.
+  await prisma.tenant.upsert({
+    where: { id: 'default' },
+    update: {},
+    create: { id: 'default', slug: 'default', name: 'Default ISP', status: 'ACTIVE', contactEmail: 'ops@nexora.local' },
+  });
+  await prisma.tenant.upsert({
+    where: { id: 'platform' },
+    update: {},
+    create: { id: 'platform', slug: 'platform', name: 'NEXORA Platform', status: 'ACTIVE', contactEmail: 'owner@nexora.local' },
+  });
+  console.log('Reserved tenants seeded: default, platform');
+}
+
+async function seedPlatformOwner(): Promise<void> {
+  const email = process.env.PLATFORM_OWNER_EMAIL;
+  const password = process.env.PLATFORM_OWNER_PASSWORD;
+  if (!email || !password) {
+    console.log('PLATFORM_OWNER_EMAIL / PLATFORM_OWNER_PASSWORD not set — skipping platform-owner creation.');
+    return;
+  }
+  const ownerRole = await prisma.role.findUniqueOrThrow({ where: { name: 'PLATFORM_OWNER' } });
+  const passwordHash = await hash(password, { memoryCost: 19456, timeCost: 2, parallelism: 1 });
+  await prisma.user.upsert({
+    where: { email },
+    update: { passwordHash, roleId: ownerRole.id, tenantId: 'platform' },
+    create: { email, passwordHash, displayName: 'Platform Owner', roleId: ownerRole.id, tenantId: 'platform' },
+  });
+  console.log(`Platform owner seeded: ${email}`);
+}
+
 async function seedRbac(): Promise<void> {
   for (const key of PERMISSIONS) {
     await prisma.permission.upsert({ where: { key }, update: {}, create: { key } });
@@ -156,8 +189,10 @@ async function seedRouter(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  await seedTenants();
   await seedRbac();
   await seedSuperAdmin();
+  await seedPlatformOwner();
   await seedPackages();
   await seedRouter();
 }

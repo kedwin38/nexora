@@ -70,7 +70,12 @@ export class HmacTokenService implements TokenService {
         throw new TokenError('TOKEN_REVOKED');
       }
     }
-    return { subjectType: payload.subjectType, subjectId: payload.subjectId, role: payload.role };
+    return {
+      subjectType: payload.subjectType,
+      subjectId: payload.subjectId,
+      role: payload.role,
+      ...(payload.tenantId !== undefined ? { tenantId: payload.tenantId } : {}),
+    };
   }
 
   public async revoke(token: string): Promise<void> {

@@ -14,6 +14,9 @@ const ROOT = resolve(import.meta.dirname, '..', '..');
 
 export const ADMIN_EMAIL = 'admin@nexora.test';
 export const ADMIN_PASSWORD = 'E2eAdmin!2026';
+export const PLATFORM_OWNER_EMAIL = 'owner@nexora.test';
+export const PLATFORM_OWNER_PASSWORD = 'E2eOwner!2026';
+export const CREDENTIALS_ENCRYPTION_KEY = 'e2e-credentials-key-0123456789abcdef0123456789';
 const SESSION_SECRET = 'e2e-local-secret-0123456789abcdef0123456789abcdef';
 
 export interface Stack {
@@ -55,6 +58,10 @@ export async function startStack(options?: { port?: number; pgPort?: number }): 
     LOG_LEVEL: 'warn',
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
+    PLATFORM_OWNER_EMAIL,
+    PLATFORM_OWNER_PASSWORD,
+    CREDENTIALS_ENCRYPTION_KEY,
+    ALLOW_TENANT_SIGNUP: 'true',
   };
 
   const { default: EmbeddedPostgres } = await import('embedded-postgres');

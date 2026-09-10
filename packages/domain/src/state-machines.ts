@@ -96,15 +96,19 @@ export type PaymentStatus =
   | 'SUCCESS'
   | 'FAILED'
   | 'CANCELLED'
+  | 'EXPIRED'
   | 'REVERSED'
   | 'REFUNDED';
 
+// EXPIRED = the STK prompt was never answered before its deadline (timeout).
+// Every non-terminal state can reach a terminal one, so no payment hangs.
 export const paymentMachine = createStateMachine<PaymentStatus>('Payment', {
-  INITIATED: ['PENDING', 'FAILED', 'CANCELLED'],
-  PENDING: ['SUCCESS', 'FAILED', 'CANCELLED'],
+  INITIATED: ['PENDING', 'FAILED', 'CANCELLED', 'EXPIRED'],
+  PENDING: ['SUCCESS', 'FAILED', 'CANCELLED', 'EXPIRED'],
   SUCCESS: ['REVERSED', 'REFUNDED'],
   FAILED: [],
   CANCELLED: [],
+  EXPIRED: [],
   REVERSED: [],
   REFUNDED: [],
 });

@@ -51,7 +51,7 @@ export async function registerAuthRoutes(app: FastifyInstance, nexora: NexoraCon
     }
 
     const issued = await nexora.tokens.issue(
-      { subjectType: 'user', subjectId: user.id, role: user.role.name },
+      { subjectType: 'user', subjectId: user.id, role: user.role.name, tenantId: user.tenantId },
       { ip: request.ip, userAgent: request.headers['user-agent'] },
     );
     await nexora.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
@@ -59,7 +59,7 @@ export async function registerAuthRoutes(app: FastifyInstance, nexora: NexoraCon
       action: 'AUTH_LOGIN_SUCCESS',
       resourceType: 'User',
       resourceId: user.id,
-      actor: { subjectType: 'user', subjectId: user.id, role: user.role.name, permissions: [] },
+      actor: { subjectType: 'user', subjectId: user.id, role: user.role.name, permissions: [], tenantId: user.tenantId },
       correlationId: request.id,
       ipAddress: request.ip,
     });
@@ -67,7 +67,7 @@ export async function registerAuthRoutes(app: FastifyInstance, nexora: NexoraCon
     return await reply.status(200).send({
       token: issued.token,
       expiresAt: issued.expiresAt.toISOString(),
-      user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role.name },
+      user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role.name, tenantId: user.tenantId },
     });
   });
 
@@ -85,11 +85,19 @@ export async function registerAuthRoutes(app: FastifyInstance, nexora: NexoraCon
     }
     const user = await nexora.prisma.user.findUnique({
       where: { id: request.principal.subjectId },
-      select: { id: true, email: true, displayName: true, role: { select: { name: true } } },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        tenantId: true,
+        role: { select: { name: true } },
+        tenant: { select: { name: true, slug: true, status: true } },
+      },
     });
     if (user === null) throw new UnauthorizedError(undefined, request.id);
     return await reply.status(200).send({
-      user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role.name },
+      user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role.name, tenantId: user.tenantId },
+      tenant: { id: user.tenantId, name: user.tenant.name, slug: user.tenant.slug, status: user.tenant.status },
       permissions: request.principal.permissions,
     });
   });

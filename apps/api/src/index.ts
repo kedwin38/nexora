@@ -189,7 +189,7 @@ async function main(): Promise<void> {
   // ---- Interim operator portal (Stage 7 replaces this with apps/web) ----
   const portalHtml = await loadPortalHtml();
   if (portalHtml !== null) {
-    const portalPaths = new Set(['/', '/auth/login', '/auth/customer', '/dashboard', '/packages', '/guest', '/admin', '/admin/ops', '/icon.svg']);
+    const portalPaths = new Set(['/', '/auth/login', '/auth/customer', '/dashboard', '/packages', '/guest', '/admin', '/admin/ops', '/owner', '/guide', '/icon.svg']);
     app.get('*', async (request, reply) => {
       const urlPath = request.url.split('?')[0] ?? '';
       if (urlPath === '/icon.svg') {

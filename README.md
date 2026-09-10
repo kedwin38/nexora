@@ -1,13 +1,33 @@
 # NEXORA ISP OS
 
-Policy-driven ISP operating system — Railway-first. Control loop:
+Multi-tenant, policy-driven ISP operating system — Railway-first. Many
+companies ("tenants") run their own hotspot/ISP business on one deployment,
+each with its own staff, customers, packages, routers and M-Pesa collection.
+A platform owner governs the whole estate. Control loop:
 
 ```
 BUSINESS STATE → POLICY RESOLUTION → DESIRED NETWORK STATE → NETWORK CONTROL
 → ACTUAL NETWORK STATE → TELEMETRY/USAGE → RECONCILIATION → POLICY RE-EVALUATION
 ```
 
-Status: **Stage 1 (Foundation)** — see `PROJECT_STATE.md` (always current) and `CHECKPOINT.md` (latest verified state).
+### Highlights
+
+- **Multi-tenant**: company self-signup, per-tenant data isolation, a
+  platform-owner console over all companies. See `docs/MULTI_TENANCY.md`.
+- **M-Pesa Pay Bill *and* Till (Buy Goods)**, per-company Daraja credentials
+  encrypted at rest, and a payment lifecycle where **nothing is left
+  hanging** — every payment ends SUCCESS / CANCELLED / EXPIRED / FAILED via
+  callback or a reconciliation sweep. See `docs/PAYMENTS.md`.
+- **Router provisioning** (MikroTik RouterOS + Tenda) with verified
+  read-back and drift reconciliation. Setup commands in `docs/ROUTER_SETUP.md`.
+
+### Guides
+
+- `docs/USER_GUIDE.md` — customers, company staff, platform owner, first-run
+- `docs/ROUTER_SETUP.md` — MikroTik / Tenda commands and connectivity patterns
+- `docs/PAYMENTS.md` — paybill/till config and the payment lifecycle
+- `docs/MULTI_TENANCY.md` — how tenancy and the platform owner work
+- `PROJECT_STATE.md` (always current) · `CHECKPOINT.md` (latest verified state)
 
 ## Layout
 
@@ -44,4 +64,10 @@ npm run typecheck      # tsc --noEmit all workspaces
 npm run lint           # eslint
 npm test               # vitest
 npm run dev:api        # api with watch (needs .env)
+npm run e2e            # embedded Postgres + full control-loop acceptance suite
 ```
+
+## ADR index
+
+Architecture Decision Records live in `docs/adrs/`. Notable recent ones:
+ADR-013 (tenant credential encryption, AES-256-GCM).

@@ -68,6 +68,27 @@ export function renderNotification(eventType: string, payload: PayloadShape): No
         subject: 'Payment confirmed',
         body: `Payment of ${toKes(payload.amountMinor ?? 0)} confirmed. Receipt ${payload.receipt ?? '-'}. Thank you.`,
       };
+    case 'PAYMENT_CANCELLED':
+      return {
+        channel: 'SMS',
+        triggerType: eventType,
+        subject: 'Payment cancelled',
+        body: 'Your M-Pesa payment was cancelled. No money was deducted. Try again when ready.',
+      };
+    case 'PAYMENT_EXPIRED':
+      return {
+        channel: 'SMS',
+        triggerType: eventType,
+        subject: 'Payment timed out',
+        body: 'Your payment request timed out before completion. No money was deducted. Please retry.',
+      };
+    case 'PAYMENT_FAILED':
+      return {
+        channel: 'SMS',
+        triggerType: eventType,
+        subject: 'Payment failed',
+        body: 'Your M-Pesa payment did not go through. Please check your balance and try again.',
+      };
     case 'SUBSCRIPTION_ACTIVATED':
       return {
         channel: 'SMS',
@@ -134,8 +155,15 @@ export async function createNotificationsFromOutbox(
         ? await resolveCustomerId(prisma, event.aggregateType, event.aggregateId)
         : null;
 
+    // Scope the notification to the customer's tenant (defaults to 'default').
+    const tenantId =
+      customerId !== null
+        ? (await prisma.customer.findUnique({ where: { id: customerId }, select: { tenantId: true } }))?.tenantId ?? 'default'
+        : 'default';
+
     await prisma.notification.create({
       data: {
+        tenantId,
         customerId,
         triggerType: draft.triggerType,
         channel: draft.channel,

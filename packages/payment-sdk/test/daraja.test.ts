@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classifyStkResultCode,
   darajaPassword,
   darajaTimestamp,
   MockPaymentProvider,
+  MpesaDarajaProvider,
   parseStkCallback,
 } from '@nexora/payment-sdk';
 
@@ -60,6 +62,62 @@ describe('parseStkCallback', () => {
     expect(parseStkCallback({})).toBeNull();
     expect(parseStkCallback({ Body: {} })).toBeNull();
     expect(parseStkCallback('string')).toBeNull();
+  });
+});
+
+describe('classifyStkResultCode', () => {
+  it('maps success, cancel, timeout and generic failure', () => {
+    expect(classifyStkResultCode(0)).toBe('SUCCESS');
+    expect(classifyStkResultCode(1032)).toBe('CANCELLED');
+    expect(classifyStkResultCode(1037)).toBe('TIMEOUT');
+    expect(classifyStkResultCode(1019)).toBe('TIMEOUT');
+    expect(classifyStkResultCode(1)).toBe('FAILED');
+    expect(classifyStkResultCode(2001)).toBe('FAILED');
+  });
+});
+
+describe('MpesaDarajaProvider STK body (paybill vs till)', () => {
+  function captureBody(channel: 'paybill' | 'till', partyB?: string): Promise<Record<string, unknown>> {
+    let captured: Record<string, unknown> = {};
+    const fetchImpl = (async (url: string, init?: { body?: string }) => {
+      if (String(url).includes('/oauth/')) {
+        return new Response(JSON.stringify({ access_token: 't', expires_in: '3600' }), { status: 200 });
+      }
+      captured = JSON.parse(init?.body ?? '{}');
+      return new Response(JSON.stringify({ ResponseCode: '0', CheckoutRequestID: 'ws_CO_1', MerchantRequestID: 'm1' }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const provider = new MpesaDarajaProvider({
+      env: 'sandbox',
+      consumerKey: 'k',
+      consumerSecret: 's',
+      shortcode: '174379',
+      channel,
+      ...(partyB !== undefined ? { partyB } : {}),
+      passkey: 'passkey',
+      callbackUrl: 'https://x/cb',
+      fetchImpl,
+    });
+    return provider
+      .initiateStkPush({ phoneNumber: '254712345678', amountMinor: 3000, accountReference: 'NEXORA', description: 'Day Pass', transactionReference: 'idem-1' })
+      .then(() => captured);
+  }
+
+  it('uses CustomerPayBillOnline and credits the shortcode for paybill', async () => {
+    const body = await captureBody('paybill');
+    expect(body.TransactionType).toBe('CustomerPayBillOnline');
+    expect(body.PartyB).toBe('174379');
+  });
+
+  it('uses CustomerBuyGoodsOnline and credits the till for a till', async () => {
+    const body = await captureBody('till', '5678901');
+    expect(body.TransactionType).toBe('CustomerBuyGoodsOnline');
+    expect(body.PartyB).toBe('5678901');
+    expect(body.BusinessShortCode).toBe('174379');
+  });
+
+  it('defaults a till PartyB to the shortcode when unset', async () => {
+    const body = await captureBody('till');
+    expect(body.PartyB).toBe('174379');
   });
 });
 

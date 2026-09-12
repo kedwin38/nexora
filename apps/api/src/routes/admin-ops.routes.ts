@@ -18,8 +18,8 @@ export async function registerAdminOpsRoutes(app: FastifyInstance, nexora: Nexor
     '/api/v1/admin/customers/:id',
     { preHandler: [app.requirePermission('customer.read')] },
     async (request, reply) => {
-      const customer = await nexora.prisma.customer.findUnique({
-        where: { id: request.params.id },
+      const customer = await nexora.prisma.customer.findFirst({
+        where: { id: request.params.id, tenantId: request.principal!.tenantId },
         include: {
           devices: true,
           guestAccess: true,

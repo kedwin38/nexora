@@ -26,6 +26,8 @@ export interface AuthenticatedPrincipal {
   readonly subjectId: string;
   readonly role: Role;
   readonly permissions: readonly Permission[];
+  /** Company the subject belongs to. 'platform' for the platform owner. */
+  readonly tenantId: string;
 }
 
 declare module 'fastify' {
@@ -48,6 +50,7 @@ export async function registerAuthPlugin(app: FastifyInstance, nexora: NexoraCon
         subjectId: payload.subjectId,
         role,
         permissions: permissionsForRole(role),
+        tenantId: payload.tenantId ?? 'default',
       };
     } catch (error) {
       if (error instanceof TokenError) {
@@ -73,12 +76,22 @@ export async function registerAuthPlugin(app: FastifyInstance, nexora: NexoraCon
       throw new UnauthorizedError('Customer authentication required.', request.id);
     }
   });
+
+  app.decorate('requirePlatformOwner', async (request: FastifyRequest, _reply: FastifyReply) => {
+    if (request.principal === null) {
+      throw new UnauthorizedError(undefined, request.id);
+    }
+    if (request.principal.role !== 'PLATFORM_OWNER') {
+      throw new ForbiddenError('platform.read', request.id);
+    }
+  });
 }
 
 declare module 'fastify' {
   interface FastifyInstance {
     requirePermission(permission: Permission): (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     requireCustomer(request: FastifyRequest, reply: FastifyReply): Promise<void>;
+    requirePlatformOwner(request: FastifyRequest, reply: FastifyReply): Promise<void>;
   }
   interface FastifyRequest {
     authError?: string;
@@ -101,6 +114,7 @@ export interface AuditInput {
 export async function writeAudit(nexora: NexoraContext, input: AuditInput): Promise<void> {
   await nexora.prisma.auditLog.create({
     data: {
+      tenantId: input.actor?.tenantId ?? null,
       actorId: input.actor?.subjectType === 'user' ? input.actor.subjectId : null,
       actorType: input.actor === null ? 'SYSTEM' : input.actor.subjectType === 'user' ? 'USER' : 'CUSTOMER',
       action: input.action,

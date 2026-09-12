@@ -60,7 +60,7 @@ export async function runExpiryCycle(prisma: PrismaClient): Promise<ExpiryCycleR
         });
 
         const router = await tx.router.findFirst({
-          where: { status: { not: 'OFFLINE' } },
+          where: { tenantId: subscription.tenantId, status: { not: 'OFFLINE' } },
           orderBy: { createdAt: 'asc' },
         });
         if (router !== null && desired.macAddress !== null) {

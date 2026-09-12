@@ -41,6 +41,19 @@ export const apiEnvSchema = databaseEnvSchema.merge(redisEnvSchema).extend({
   /** mock = in-memory router (local/dev); mikrotik = RouterOS API. */
   ROUTER_ADAPTER: z.enum(['mock', 'mikrotik']).default('mock'),
   CORS_ORIGIN: z.string().default('*'),
+  /** Public origin of the API (used to build per-tenant M-Pesa callback URLs
+   *  and the default webhook URL). e.g. https://api.nexora.co.ke */
+  PUBLIC_BASE_URL: z.string().url().optional(),
+  /** AES-256-GCM master key for tenant-supplied credentials at rest (ADR-013).
+   *  Required for any tenant to self-configure M-Pesa; optional otherwise. */
+  CREDENTIALS_ENCRYPTION_KEY: z.string().min(32).optional(),
+  /** Allow public company self-signup. OFF by default — opt in explicitly with
+   *  ALLOW_TENANT_SIGNUP=true once you're ready to accept new companies
+   *  (autopsy F7). Keeps an unconfigured deployment from being spammed. */
+  ALLOW_TENANT_SIGNUP: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => v === true || v === 'true' || v === '1')
+    .default(false),
 });
 
 /**
@@ -55,6 +68,10 @@ export const mpesaEnvSchema = z.object({
   MPESA_SHORTCODE: z.string().min(1),
   MPESA_PASSKEY: z.string().min(1),
   MPESA_CALLBACK_URL: z.string().url(),
+  /** Platform-default collection channel (per-tenant config overrides this). */
+  MPESA_CHANNEL: z.enum(['paybill', 'till']).default('paybill'),
+  /** Till/store number for Buy Goods (defaults to MPESA_SHORTCODE). */
+  MPESA_PARTY_B: z.string().optional(),
 });
 
 export type MpesaEnv = z.infer<typeof mpesaEnvSchema>;

@@ -50,8 +50,9 @@ export async function registerAdminPackageRoutes(app: FastifyInstance, nexora: N
   app.get(
     '/api/v1/admin/packages',
     { preHandler: [app.requirePermission('package.read')] },
-    async (_request, reply) => {
+    async (request, reply) => {
       const packages = await nexora.prisma.package.findMany({
+        where: { tenantId: request.principal!.tenantId },
         orderBy: [{ status: 'asc' }, { displayOrder: 'asc' }, { version: 'desc' }],
         include: { policy: true },
       });
@@ -86,13 +87,15 @@ export async function registerAdminPackageRoutes(app: FastifyInstance, nexora: N
     { preHandler: [app.requirePermission('package.write')] },
     async (request, reply) => {
       const input = parseOrThrow(packageCreateSchema, request.body, request.id);
+      const tenantId = request.principal!.tenantId;
       const pkg = await nexora.prisma.$transaction(async (tx) => {
         const existing = await tx.package.findFirst({
-          where: { tenantId: 'default', name: input.name },
+          where: { tenantId, name: input.name },
           orderBy: { version: 'desc' },
         });
         const created = await tx.package.create({
           data: {
+            tenantId,
             name: input.name,
             ...(input.description !== undefined ? { description: input.description } : {}),
             priceMinor: input.priceMinor,
@@ -142,13 +145,16 @@ export async function registerAdminPackageRoutes(app: FastifyInstance, nexora: N
     async (request, reply) => {
       const input = parseOrThrow(packageUpdateSchema, request.body, request.id);
       const current = await nexora.prisma.package.findUnique({ where: { id: request.params.id }, include: { policy: true } });
-      if (current === null) throw new NotFoundError('Package', request.params.id, request.id);
+      if (current === null || current.tenantId !== request.principal!.tenantId) {
+        throw new NotFoundError('Package', request.params.id, request.id);
+      }
 
       // Version-aware update: clone as vN+1, retire the old row (§4.2/§111).
       const created = await nexora.prisma.$transaction(async (tx) => {
         await tx.package.update({ where: { id: current.id }, data: { status: 'RETIRED' } });
         const next = await tx.package.create({
           data: {
+            tenantId: current.tenantId,
             name: input.name ?? current.name,
             description: input.description ?? current.description,
             priceMinor: input.priceMinor ?? current.priceMinor,
@@ -202,7 +208,9 @@ export async function registerAdminPackageRoutes(app: FastifyInstance, nexora: N
     { preHandler: [app.requirePermission('package.write')] },
     async (request, reply) => {
       const pkg = await nexora.prisma.package.findUnique({ where: { id: request.params.id } });
-      if (pkg === null) throw new NotFoundError('Package', request.params.id, request.id);
+      if (pkg === null || pkg.tenantId !== request.principal!.tenantId) {
+        throw new NotFoundError('Package', request.params.id, request.id);
+      }
       await nexora.prisma.package.update({ where: { id: pkg.id }, data: { status: 'RETIRED' } });
       await writeAudit(nexora, {
         action: 'PACKAGE_RETIRED',

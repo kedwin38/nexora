@@ -43,13 +43,20 @@ export async function runUsageSyncCycle(
   let ended = 0;
   let accounted = 0n;
 
+  // A MAC may exist in several tenants — only match devices of THIS router's
+  // tenant so usage is never attributed across companies (autopsy F2).
+  const router = await prisma.router.findUnique({ where: { id: routerId }, select: { tenantId: true } });
+  if (router === null) {
+    return { routerId, sessionsSeen: active.length, sessionsCreated: 0, sessionsEnded: 0, bytesAccounted: 0n };
+  }
+
   const seenMacs = new Set(active.map((s) => s.macAddress.toUpperCase()));
 
   // Auto-create sessions for devices online on the router with an eligible subscription.
   for (const routerSession of active) {
     const mac = routerSession.macAddress.toUpperCase();
     const device = await prisma.device.findFirst({
-      where: { macAddress: mac },
+      where: { macAddress: mac, customer: { tenantId: router.tenantId } },
       orderBy: { lastSeenAt: 'desc' },
       include: {
         customer: {

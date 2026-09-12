@@ -11,16 +11,19 @@ import { normalizeKenyanMsisdn } from '@nexora/payment-sdk';
 import type { NexoraContext } from '../context.js';
 import { writeAudit } from '../plugins/auth.js';
 import { createOutboxEvent } from '../outbox.js';
+import { resolveTenantId } from '../tenant.js';
 
 const registerSchema = z.object({
   phone: z.string(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   displayName: z.string().min(1).max(100).optional(),
+  tenant: z.string().optional(),
 });
 
 const loginSchema = z.object({
   phone: z.string(),
   password: z.string().min(1),
+  tenant: z.string().optional(),
 });
 
 function parseOrThrow<T extends z.ZodTypeAny>(schema: T, body: unknown, requestId: string): z.infer<T> {
@@ -43,9 +46,10 @@ export async function registerCustomerRoutes(app: FastifyInstance, nexora: Nexor
       if (phone === null) {
         throw new ValidationError('Invalid Kenyan phone number.', undefined, request.id);
       }
+      const tenantId = await resolveTenantId(nexora, request);
 
       const existing = await nexora.prisma.customer.findFirst({
-        where: { phoneNumber: phone, tenantId: 'default' },
+        where: { phoneNumber: phone, tenantId },
       });
       if (existing !== null) {
         throw new ConflictError('A customer with this phone number already exists.', undefined, request.id);
@@ -55,6 +59,7 @@ export async function registerCustomerRoutes(app: FastifyInstance, nexora: Nexor
       const customer = await nexora.prisma.customer.create({
         data: {
           customerNumber: `CUS-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+          tenantId,
           accountType: 'REGISTERED',
           status: 'ACTIVE',
           phoneNumber: phone,
@@ -80,7 +85,7 @@ export async function registerCustomerRoutes(app: FastifyInstance, nexora: Nexor
       });
 
       const issued = await nexora.tokens.issue(
-        { subjectType: 'customer', subjectId: customer.id, role: 'CUSTOMER' },
+        { subjectType: 'customer', subjectId: customer.id, role: 'CUSTOMER', tenantId },
         { ip: request.ip, userAgent: request.headers['user-agent'] },
       );
 
@@ -101,8 +106,9 @@ export async function registerCustomerRoutes(app: FastifyInstance, nexora: Nexor
       if (phone === null) {
         throw new ValidationError('Invalid Kenyan phone number.', undefined, request.id);
       }
+      const tenantId = await resolveTenantId(nexora, request);
       const customer = await nexora.prisma.customer.findFirst({
-        where: { phoneNumber: phone, tenantId: 'default' },
+        where: { phoneNumber: phone, tenantId },
       });
       const passwordOk =
         customer !== null && customer.passwordHash !== null
@@ -113,7 +119,7 @@ export async function registerCustomerRoutes(app: FastifyInstance, nexora: Nexor
       }
 
       const issued = await nexora.tokens.issue(
-        { subjectType: 'customer', subjectId: customer.id, role: 'CUSTOMER' },
+        { subjectType: 'customer', subjectId: customer.id, role: 'CUSTOMER', tenantId: customer.tenantId },
         { ip: request.ip, userAgent: request.headers['user-agent'] },
       );
       await nexora.prisma.customer.update({ where: { id: customer.id }, data: { lastLoginAt: new Date() } });

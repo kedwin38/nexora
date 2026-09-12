@@ -69,6 +69,8 @@
     <a href="/packages" data-p="packages">Packages</a>
     <a href="/guest" data-p="guest">Guest</a>
     <a href="/admin" data-p="admin">Admin</a>
+    <a href="/owner" data-p="owner">Owner</a>
+    <a href="/guide" data-p="guide">Guide</a>
   </nav>
 </header>
 <main id="view"><div class="card mono">LOADING…</div></main>
@@ -115,44 +117,76 @@ const views = {};
 views.login = () => {
   const staff = !!store.get('user_token');
   $('#view').innerHTML = `
-    <h1>${staff ? 'OPERATOR' : 'CUSTOMER'} ACCESS</h1>
-    <div class="sub">// authenticate to the NEXORA control plane</div>
+    <h1>${staff ? 'OPERATOR' : 'NEXORA'} ACCESS</h1>
+    <div class="sub">// multi-tenant ISP control plane — sign in, or start a company</div>
     <div class="grid c2">
       <div class="card">
         <div class="k">Operator / Staff Login</div><br>
-        <input id="a-email" placeholder="admin@nexora.isp" />
+        <input id="a-email" placeholder="admin@yourcompany.co.ke" />
         <input id="a-pass" type="password" placeholder="password" />
         <button id="a-go">AUTHENTICATE</button>
-        <p class="sub" style="margin-top:10px">Requires a seeded admin account (see RAILWAY_SETUP.md).</p>
+        <p class="sub" style="margin-top:10px">Company admins + the platform owner sign in here.</p>
       </div>
       <div class="card">
         <div class="k">Customer Access</div><br>
+        <input id="c-tenant" placeholder="company handle (optional, e.g. acme-fibre)" />
         <input id="c-phone" placeholder="0712345678" />
         <input id="c-pass" type="password" placeholder="password (min 8 chars)" />
         <button id="c-login">SIGN IN</button>
         <button class="ghost" id="c-reg" style="width:100%;margin-top:8px">CREATE ACCOUNT</button>
       </div>
+    </div>
+    <br/>
+    <div class="card">
+      <div class="k">Start a company on NEXORA (free trial)</div><br>
+      <div class="grid c2">
+        <div>
+          <input id="s-company" placeholder="Company name (e.g. Acme Fibre)" />
+          <input id="s-name" placeholder="Your name" />
+          <input id="s-phone" placeholder="Contact phone (optional)" />
+        </div>
+        <div>
+          <input id="s-email" placeholder="Admin email" />
+          <input id="s-pass" type="password" placeholder="Admin password (min 10 chars)" />
+          <button id="s-go">CREATE COMPANY →</button>
+        </div>
+      </div>
+      <p class="sub" style="margin-top:8px">You become your company's SUPER_ADMIN with a ready-to-sell starter catalogue. Configure M-Pesa under Admin → Settings.</p>
     </div>`;
   $('#a-go').onclick = async () => {
     try {
       const r = await api('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email: $('#a-email').value, password: $('#a-pass').value }) });
       store.set('user_token', r.token); store.set('user', r.user); store.del('customer_token');
-      location.href = '/admin';
+      location.href = r.user?.role === 'PLATFORM_OWNER' ? '/owner' : '/admin';
     } catch (e) { toast(e.message, true); }
   };
   $('#c-login').onclick = async () => {
     try {
-      const r = await api('/api/v1/customers/login', { method: 'POST', body: JSON.stringify({ phone: $('#c-phone').value, password: $('#c-pass').value }) });
+      const tenant = $('#c-tenant').value.trim() || undefined;
+      const r = await api('/api/v1/customers/login', { method: 'POST', body: JSON.stringify({ phone: $('#c-phone').value, password: $('#c-pass').value, tenant }) });
       store.set('customer_token', r.token); store.del('user_token');
       location.href = '/dashboard';
     } catch (e) { toast(e.message, true); }
   };
   $('#c-reg').onclick = async () => {
     try {
-      const r = await api('/api/v1/customers/register', { method: 'POST', body: JSON.stringify({ phone: $('#c-phone').value, password: $('#c-pass').value }) });
+      const tenant = $('#c-tenant').value.trim() || undefined;
+      const r = await api('/api/v1/customers/register', { method: 'POST', body: JSON.stringify({ phone: $('#c-phone').value, password: $('#c-pass').value, tenant }) });
       store.set('customer_token', r.token); store.del('user_token');
       toast('Account created.');
       location.href = '/dashboard';
+    } catch (e) { toast(e.message, true); }
+  };
+  $('#s-go').onclick = async () => {
+    try {
+      const r = await api('/api/v1/tenants/signup', { method: 'POST', body: JSON.stringify({
+        companyName: $('#s-company').value, adminName: $('#s-name').value,
+        adminEmail: $('#s-email').value, adminPassword: $('#s-pass').value,
+        contactPhone: $('#s-phone').value || undefined,
+      })});
+      store.set('user_token', r.token); store.set('user', r.user); store.del('customer_token');
+      toast('Company created — welcome to NEXORA.');
+      location.href = '/admin';
     } catch (e) { toast(e.message, true); }
   };
 };
@@ -288,7 +322,7 @@ views.admin = async (tab) => {
   if (!store.get('user_token')) { toast('Operator login required', true); return views.login(); }
   tab = tab || (views.admin._tab || 'overview');
   views.admin._tab = tab;
-  const tabs = ['overview', 'customers', 'packages', 'users', 'ops', 'triggers'];
+  const tabs = ['overview', 'customers', 'packages', 'users', 'ops', 'settings', 'triggers'];
   $('#view').innerHTML = `
     <h1>ADMIN COMMAND CENTER</h1>
     <div class="sub">// business state · desired state · actual state · audit</div>
@@ -309,6 +343,7 @@ views.admin = async (tab) => {
       <div class="card"><div class="k">Customers</div><div class="v">${s.customers ?? '—'}</div></div>
       <div class="card"><div class="k">Active subs</div><div class="v ok">${s.activeSubscriptions ?? '—'}</div></div>
       <div class="card"><div class="k">Revenue</div><div class="v">${s.revenueMinor != null ? fmtKes(s.revenueMinor) : '—'}</div></div>
+      <div class="card"><div class="k">Payments pending / closed-unpaid</div><div class="v ${s.pendingPayments ? 'warn' : 'ok'}">${s.pendingPayments ?? 0} / ${s.unresolvedPayments ?? 0}</div></div>
       <div class="card"><div class="k">Net ops queued / failed</div><div class="v ${s.failedNetworkOperations ? 'crit' : 'ok'}">${s.queuedNetworkOperations ?? 0} / ${s.failedNetworkOperations ?? 0}</div></div>
     </div>
     <br/>
@@ -438,6 +473,69 @@ views.admin = async (tab) => {
     });
   }
 
+  if (tab === 'settings') {
+    const t = await api('/api/v1/admin/tenant').catch(() => null);
+    const ten = t?.tenant || {};
+    const pay = t?.payment || {};
+    body.innerHTML = `<div class="grid c2">
+      <div class="card"><div class="k">Company</div><br>
+        <table>
+          <tr><td>Name</td><td class="mono">${esc(ten.name || '—')}</td></tr>
+          <tr><td>Handle</td><td class="mono">${esc(ten.slug || '—')}</td></tr>
+          <tr><td>Status</td><td>${pill(ten.status || 'UNKNOWN')}</td></tr>
+          <tr><td>Country</td><td>${esc(ten.country || '—')}</td></tr>
+        </table>
+        <br><div class="k">Branding / contact</div><br>
+        <input id="t-support-phone" placeholder="support phone" value="${esc(ten.supportPhone || '')}" />
+        <input id="t-support-email" placeholder="support email" value="${esc(ten.supportEmail || '')}" />
+        <input id="t-color" placeholder="brand colour #38e1c4" value="${esc(ten.primaryColor || '')}" />
+        <button class="ghost" id="t-save">SAVE COMPANY PROFILE</button>
+      </div>
+      <div class="card"><div class="k">M-Pesa collection (paybill / till)</div><br>
+        <table>
+          <tr><td>Channel</td><td>${pill(pay.channel || 'PAYBILL')}</td></tr>
+          <tr><td>Credentials</td><td>${pay.credentialsConfigured ? pill('SUCCESS') : pill('PENDING')}</td></tr>
+          <tr><td>Encryption</td><td>${pay.encryptionAvailable ? pill('SUCCESS') : pill('FAILED') + ' set CREDENTIALS_ENCRYPTION_KEY'}</td></tr>
+        </table><br>
+        <select id="pm-channel">
+          <option value="PAYBILL" ${pay.channel === 'PAYBILL' ? 'selected' : ''}>PAYBILL (CustomerPayBillOnline)</option>
+          <option value="TILL" ${pay.channel === 'TILL' ? 'selected' : ''}>TILL / Buy Goods (CustomerBuyGoodsOnline)</option>
+        </select>
+        <select id="pm-env">
+          <option value="sandbox" ${pay.environment !== 'production' ? 'selected' : ''}>sandbox</option>
+          <option value="production" ${pay.environment === 'production' ? 'selected' : ''}>production</option>
+        </select>
+        <input id="pm-shortcode" placeholder="shortcode / store number" value="${esc(pay.shortcode || '')}" />
+        <input id="pm-partyb" placeholder="till number (Buy Goods only)" value="${esc(pay.partyB || '')}" />
+        <input id="pm-ck" type="password" placeholder="consumer key (leave blank to keep)" />
+        <input id="pm-cs" type="password" placeholder="consumer secret (leave blank to keep)" />
+        <input id="pm-pk" type="password" placeholder="passkey (leave blank to keep)" />
+        <button id="pm-save">SAVE M-PESA CONFIG</button>
+        <p class="sub" style="margin-top:8px">Credentials are encrypted at rest; this screen never shows them back.</p>
+      </div></div>`;
+    body.querySelector('#t-save').onclick = async () => {
+      try {
+        await api('/api/v1/admin/tenant', { method: 'PATCH', body: JSON.stringify({
+          supportPhone: $('#t-support-phone').value || undefined,
+          supportEmail: $('#t-support-email').value || undefined,
+          primaryColor: $('#t-color').value || undefined,
+        })});
+        toast('Company profile saved.');
+      } catch (e) { toast(e.message, true); }
+    };
+    body.querySelector('#pm-save').onclick = async () => {
+      try {
+        const payload = { channel: $('#pm-channel').value, env: $('#pm-env').value, shortcode: $('#pm-shortcode').value };
+        if ($('#pm-partyb').value) payload.partyB = $('#pm-partyb').value;
+        if ($('#pm-ck').value) payload.consumerKey = $('#pm-ck').value;
+        if ($('#pm-cs').value) payload.consumerSecret = $('#pm-cs').value;
+        if ($('#pm-pk').value) payload.passkey = $('#pm-pk').value;
+        await api('/api/v1/admin/tenant/payment-config', { method: 'PUT', body: JSON.stringify(payload) });
+        toast('M-Pesa configuration saved.'); views.admin('settings');
+      } catch (e) { toast(e.message, true); }
+    };
+  }
+
   if (tab === 'triggers') {
     const pc = await api('/api/v1/admin/payment-config').catch(() => null);
     body.innerHTML = `<div class="grid c2">
@@ -464,6 +562,98 @@ views.admin = async (tab) => {
   }
 };
 
+views.owner = async () => {
+  if (!store.get('user_token')) { toast('Owner login required', true); return views.login(); }
+  let sum, tenants, health;
+  try {
+    [sum, tenants, health] = await Promise.all([
+      api('/api/v1/platform/summary'),
+      api('/api/v1/platform/tenants'),
+      api('/api/v1/platform/health'),
+    ]);
+  } catch (e) {
+    toast('Platform owner access required.', true);
+    return views.admin();
+  }
+  const s = sum.summary || {};
+  const h = health.health || {};
+  $('#view').innerHTML = `
+    <h1>PLATFORM OWNER CONSOLE</h1>
+    <div class="sub">// cross-tenant estate — every company on NEXORA</div>
+    <div class="grid c4">
+      <div class="card"><div class="k">Companies (active)</div><div class="v ok">${s.tenants ?? 0} <span class="sub">(${s.activeTenants ?? 0})</span></div></div>
+      <div class="card"><div class="k">Customers</div><div class="v">${s.customers ?? 0}</div></div>
+      <div class="card"><div class="k">Active subscriptions</div><div class="v ok">${s.activeSubscriptions ?? 0}</div></div>
+      <div class="card"><div class="k">Total revenue</div><div class="v">${fmtKes(s.revenueMinor)}</div></div>
+      <div class="card"><div class="k">Staff users</div><div class="v">${s.staff ?? 0}</div></div>
+      <div class="card"><div class="k">Routers online / total</div><div class="v ${s.routersOnline < s.routersTotal ? 'warn' : 'ok'}">${s.routersOnline ?? 0} / ${s.routersTotal ?? 0}</div></div>
+      <div class="card"><div class="k">Payments pending / expired / cancelled</div><div class="v">${s.pendingPayments ?? 0} / ${s.expiredPayments ?? 0} / ${s.cancelledPayments ?? 0}</div></div>
+      <div class="card"><div class="k">Failed net ops</div><div class="v ${s.failedNetworkOperations ? 'crit' : 'ok'}">${s.failedNetworkOperations ?? 0}</div></div>
+    </div>
+    <br/>
+    <div class="grid c2">
+      <div class="card"><div class="k">Companies</div><br>
+        <table><tr><th>Company</th><th>Status</th><th>M-Pesa</th><th>Customers</th><th>Active</th><th>Revenue</th><th>Action</th></tr>
+        ${(tenants.data || []).map(t => `<tr>
+          <td class="mono">${esc(t.name)}<br><span class="sub">${esc(t.slug)}</span></td>
+          <td>${pill(t.status)}</td>
+          <td>${t.mpesaConfigured ? pill('SUCCESS') + ' ' + esc(t.mpesaChannel) : pill('PENDING')}</td>
+          <td>${t.customers}</td><td>${t.activeSubscriptions}</td><td>${fmtKes(t.revenueMinor)}</td>
+          <td>${t.slug === 'default' || t.slug === 'platform' ? '<span class="sub">reserved</span>' : (t.status === 'SUSPENDED' ? '<button class="ghost" data-act="ACTIVE" data-id="' + t.id + '">ACTIVATE</button>' : '<button class="ghost" data-act="SUSPENDED" data-id="' + t.id + '">SUSPEND</button>')}</td>
+        </tr>`).join('') || '<tr><td colspan="7" class="sub">no companies yet</td></tr>'}
+        </table></div>
+      <div class="card"><div class="k">System health</div><br>
+        <table>
+          <tr><td>Outbox pending / dead</td><td>${h.outboxPending ?? 0} / <span class="${h.outboxDead ? 'crit' : ''}">${h.outboxDead ?? 0}</span></td></tr>
+          <tr><td>Jobs queued / failed</td><td>${h.jobsQueued ?? 0} / <span class="${h.jobsFailed ? 'crit' : ''}">${h.jobsFailed ?? 0}</span></td></tr>
+          <tr><td>Routers offline</td><td>${h.routersOffline ?? 0}</td></tr>
+          <tr><td>Live sessions</td><td>${h.liveSessions ?? 0}</td></tr>
+        </table>
+        <p class="sub" style="margin-top:10px">Suspending a company blocks new transactions immediately; data is retained.</p>
+      </div>
+    </div>`;
+  document.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+    try { await api('/api/v1/platform/tenants/' + b.dataset.id, { method: 'PATCH', body: JSON.stringify({ status: b.dataset.act }) }); toast('Company ' + b.dataset.act + '.'); views.owner(); } catch (e) { toast(e.message, true); }
+  });
+};
+
+views.guide = () => {
+  $('#view').innerHTML = `
+    <h1>SETUP GUIDE</h1>
+    <div class="sub">// get a company online — signup · M-Pesa · router · sell</div>
+    <div class="grid c2">
+      <div class="card"><div class="k">1 · Create your company</div><br>
+        <p class="sub">From the login page choose <b>Create a company</b>. You become SUPER_ADMIN with a starter catalogue you can edit under Admin → Packages.</p>
+      </div>
+      <div class="card"><div class="k">2 · Configure M-Pesa</div><br>
+        <p class="sub">Admin → Settings → M-Pesa. Pick <b>Pay Bill</b> or <b>Till (Buy Goods)</b>, enter your shortcode/till and Daraja Consumer Key/Secret + Passkey. Credentials are encrypted at rest. Get them from developer.safaricom.co.ke.</p>
+      </div>
+    </div>
+    <br/>
+    <div class="card"><div class="k">3 · Prepare a MikroTik (RouterOS) router</div><br>
+      <p class="sub">Create a least-privilege API user and enable the API service (run in Winbox → New Terminal):</p>
+      <pre class="mono" style="background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:12px;overflow:auto;white-space:pre-wrap;color:var(--acc)">/user group add name=nexora-api policy=api,read,write,test,!local,!telnet,!ssh,!ftp,!reboot,!policy,!winbox,!password,!web,!sniff,!sensitive,!romon
+/user add name=nexora group=nexora-api password=STRONG_SECRET comment="NEXORA automation"
+
+# Preferred: API over TLS
+/ip service set api-ssl disabled=no port=8729
+/ip service disable telnet,ftp,www
+
+# Captive portal: send unauthenticated users to your NEXORA portal
+/ip hotspot walled-garden add dst-host=YOUR_NEXORA_HOST action=allow</pre>
+      <p class="sub" style="margin-top:8px">Store the password in the server variable (e.g. <span class="mono">ROUTER_01_PASSWORD</span>) — never in the database. Prefer an outbound WireGuard/IPsec tunnel over exposing the API port. Full guide: <span class="mono">docs/ROUTER_SETUP.md</span>.</p>
+    </div>
+    <br/>
+    <div class="card"><div class="k">4 · Register the router &amp; go live</div><br>
+      <p class="sub">Add the router (vendor MIKROTIK or TENDA, host, port 8729, user <span class="mono">nexora</span>, password variable name). NEXORA health-checks it every minute and verifies each AUTHORIZE with a read-back. Then run a test purchase from the Packages page.</p>
+      <p class="sub">Tenda devices: set a strong admin password, restrict remote management to your NEXORA network, register with vendor TENDA. Capability varies by model.</p>
+    </div>
+    <br/>
+    <div class="card"><div class="k">Payment lifecycle — nothing left hanging</div><br>
+      <p class="sub">Every payment ends as <span class="pill SUCCESS">SUCCESS</span> <span class="pill FAILED">CANCELLED</span> <span class="pill FAILED">EXPIRED</span> or <span class="pill FAILED">FAILED</span>. A reconciliation sweep runs every 2 minutes to close out anything the callback missed (cancel 1032 → CANCELLED, timeouts → EXPIRED). Customers are notified of each outcome.</p>
+    </div>`;
+};
+
 // ---------- Router ----------
 const path = location.pathname;
 if (path.startsWith('/auth')) views.login();
@@ -471,10 +661,12 @@ else if (path === '/dashboard') views.dashboard();
 else if (path === '/packages') views.packages();
 else if (path === '/guest') views.guest();
 else if (path === '/admin') views.admin();
+else if (path === '/owner') views.owner();
+else if (path === '/guide') views.guide();
 else {
   // Landing: route by session
   if (store.get('customer_token')) location.href = '/dashboard';
-  else if (store.get('user_token')) location.href = '/admin';
+  else if (store.get('user_token')) location.href = store.get('user')?.role === 'PLATFORM_OWNER' ? '/owner' : '/admin';
   else views.login();
 }
 document.querySelectorAll('#nav a').forEach(a => {

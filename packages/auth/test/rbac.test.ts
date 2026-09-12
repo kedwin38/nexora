@@ -20,8 +20,23 @@ describe('RBAC matrix integrity', () => {
     }
   });
 
-  it('SUPER_ADMIN holds every permission', () => {
-    expect(permissionsForRole('SUPER_ADMIN').length).toBe(PERMISSIONS.length);
+  it('PLATFORM_OWNER holds every permission', () => {
+    expect(permissionsForRole('PLATFORM_OWNER').length).toBe(PERMISSIONS.length);
+  });
+
+  it('SUPER_ADMIN holds every tenant-scoped permission but no platform.* permission', () => {
+    const platformPerms = PERMISSIONS.filter((p) => p.startsWith('platform.'));
+    expect(permissionsForRole('SUPER_ADMIN').length).toBe(PERMISSIONS.length - platformPerms.length);
+    for (const p of platformPerms) {
+      expect(roleHasPermission('SUPER_ADMIN', p)).toBe(false);
+    }
+  });
+
+  it('only PLATFORM_OWNER holds platform.* permissions', () => {
+    for (const p of PERMISSIONS.filter((x) => x.startsWith('platform.'))) {
+      const holders = ROLES.filter((role) => roleHasPermission(role, p));
+      expect(holders).toEqual(['PLATFORM_OWNER']);
+    }
   });
 
   it('every permission is reachable by at least one role', () => {
@@ -38,10 +53,10 @@ describe('RBAC matrix integrity', () => {
     expect(roleHasPermission('NETWORK_ADMIN', 'payment.refund')).toBe(false);
   });
 
-  it('only SUPER_ADMIN can assign roles', () => {
-    expect(roleHasPermission('SUPER_ADMIN', 'role.assign')).toBe(true);
-    for (const role of ROLES.filter((r) => r !== 'SUPER_ADMIN')) {
-      expect(roleHasPermission(role, 'role.assign')).toBe(false);
+  it('only PLATFORM_OWNER and SUPER_ADMIN can assign roles', () => {
+    const canAssign = ['PLATFORM_OWNER', 'SUPER_ADMIN'];
+    for (const role of ROLES) {
+      expect(roleHasPermission(role, 'role.assign')).toBe(canAssign.includes(role));
     }
   });
 

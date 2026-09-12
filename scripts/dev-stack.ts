@@ -38,6 +38,8 @@ async function main(): Promise<void> {
     PORT: String(API_PORT),
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
+    ALLOW_TENANT_SIGNUP: 'true',
+    CREDENTIALS_ENCRYPTION_KEY: process.env.CREDENTIALS_ENCRYPTION_KEY ?? 'local-dev-credentials-key-0123456789abcdef',
   };
 
   console.log('[dev-stack] starting embedded PostgreSQL…');

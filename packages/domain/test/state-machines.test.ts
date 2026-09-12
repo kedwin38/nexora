@@ -124,6 +124,9 @@ describe('paymentMachine', () => {
     ['PENDING', 'SUCCESS'],
     ['PENDING', 'FAILED'],
     ['PENDING', 'CANCELLED'],
+    ['PENDING', 'EXPIRED'],
+    ['INITIATED', 'EXPIRED'],
+    ['INITIATED', 'CANCELLED'],
     ['SUCCESS', 'REVERSED'],
     ['SUCCESS', 'REFUNDED'],
   ] as const)('allows %s -> %s', (from, to) => {
@@ -133,6 +136,8 @@ describe('paymentMachine', () => {
   it.each([
     ['FAILED', 'SUCCESS'],
     ['CANCELLED', 'SUCCESS'],
+    ['EXPIRED', 'SUCCESS'],
+    ['EXPIRED', 'PENDING'],
     ['REFUNDED', 'SUCCESS'],
     ['REVERSED', 'PENDING'],
     ['INITIATED', 'SUCCESS'],

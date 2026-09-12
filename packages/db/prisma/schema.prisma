@@ -21,6 +21,23 @@ enum AccountType {
   GUEST
 }
 
+/// Company (tenant) lifecycle. TRIAL companies can be created via self-signup;
+/// the platform owner may SUSPEND (soft-disable, data retained) or CLOSE.
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+/// M-Pesa collection channel for a tenant. PAYBILL = CustomerPayBillOnline
+/// (an account reference is meaningful). TILL = CustomerBuyGoodsOnline
+/// (Buy Goods / till number; account reference is ignored by Safaricom).
+enum MpesaChannel {
+  PAYBILL
+  TILL
+}
+
 enum CustomerStatus {
   PENDING
   ACTIVE
@@ -30,6 +47,7 @@ enum CustomerStatus {
 }
 
 enum AdminRole {
+  PLATFORM_OWNER
   SUPER_ADMIN
   NETWORK_ADMIN
   BILLING_ADMIN
@@ -79,6 +97,7 @@ enum PaymentStatus {
   SUCCESS
   FAILED
   CANCELLED
+  EXPIRED
   REVERSED
   REFUNDED
 }
@@ -197,6 +216,60 @@ enum AuditResult {
 }
 
 // ===========================================================================
+// TENANTS (companies) — the multi-tenant boundary (§91)
+// ===========================================================================
+
+/// A company using NEXORA. Each tenant is isolated: its staff, customers,
+/// packages, routers, subscriptions and payments never cross the tenant
+/// boundary. Two reserved tenants are seeded: `default` (the reference ISP
+/// used by tests and single-tenant deployments) and `platform` (home of the
+/// PLATFORM_OWNER, who governs every tenant but owns no ISP customers).
+///
+/// M-Pesa collection is per-tenant: each company brings its own paybill or
+/// till and its own Daraja API credentials. Credentials are encrypted at rest
+/// with CREDENTIALS_ENCRYPTION_KEY (AES-256-GCM) — plaintext is never stored
+/// (ADR-013, mirroring the router-secret discipline of ADR-008).
+model Tenant {
+  id           String       @id @default(uuid())
+  slug         String       @unique // url-safe handle, e.g. "acme-fibre"
+  name         String
+  status       TenantStatus @default(TRIAL)
+  contactEmail String
+  contactPhone String?
+  country      String       @default("KE")
+  currency     String       @default("KES")
+
+  // Branding (surfaced on the captive portal / customer app)
+  supportPhone String?
+  supportEmail String?
+  primaryColor String? // hex, e.g. "#38e1c4"
+
+  // M-Pesa collection configuration
+  mpesaChannel        MpesaChannel @default(PAYBILL)
+  mpesaEnv            String       @default("sandbox") // sandbox | production
+  mpesaShortcode      String? // BusinessShortCode used for the STK password
+  mpesaPartyB         String? // till/store number for Buy Goods (defaults to shortcode)
+  mpesaCallbackUrl    String?
+  mpesaPasskeyEnc     String? // encrypted (AES-256-GCM)
+  mpesaConsumerKeyEnc String? // encrypted
+  mpesaConsumerSecretEnc String? // encrypted
+  mpesaConfiguredAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  customers     Customer[]
+  packages      Package[]
+  subscriptions Subscription[]
+  routers       Router[]
+  payments      Payment[]
+  notifications Notification[]
+
+  @@index([status])
+}
+
+// ===========================================================================
 // IDENTITY & RBAC (admin/staff plane)
 // ===========================================================================
 
@@ -229,6 +302,8 @@ model RolePermission {
 
 model User {
   id            String         @id @default(uuid())
+  tenantId      String         @default("default")
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
   email         String         @unique
   passwordHash  String
   displayName   String
@@ -244,6 +319,7 @@ model User {
   auditLogs AuditLog[]
 
   @@index([status])
+  @@index([tenantId])
 }
 
 model UserSession {
@@ -284,6 +360,7 @@ model Customer {
   id             String         @id @default(uuid())
   customerNumber String         @unique
   tenantId       String         @default("default")
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
   accountType    AccountType    @default(REGISTERED)
   status         CustomerStatus @default(PENDING)
   phoneNumber    String?
@@ -347,6 +424,7 @@ model GuestAccess {
 model Package {
   id           String        @id @default(uuid())
   tenantId     String        @default("default")
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
   name         String
   description  String?
   currency     String        @default("KES")
@@ -400,6 +478,7 @@ model Subscription {
   id              String             @id @default(uuid())
   subscriptionNumber String          @unique
   tenantId        String             @default("default")
+  tenant          Tenant             @relation(fields: [tenantId], references: [id])
   customerId      String
   customer        Customer           @relation(fields: [customerId], references: [id])
   packageId       String
@@ -451,6 +530,8 @@ model FupState {
 
 model Payment {
   id                   String          @id @default(uuid())
+  tenantId             String          @default("default")
+  tenant               Tenant          @relation(fields: [tenantId], references: [id])
   provider             PaymentProvider @default(MPESA)
   providerTransactionId String? // CheckoutRequestID — UNIQUE per provider when present
   clientReference      String? // application idempotency key
@@ -468,6 +549,10 @@ model Payment {
   receipt              String?
   failureReason        String?
   initiatedAt          DateTime        @default(now())
+  /// Hard deadline for a PENDING STK push. Past this instant with no terminal
+  /// callback, reconciliation queries the provider and closes the payment out
+  /// (SUCCESS if paid, else EXPIRED) — no payment is ever left hanging (§16).
+  deadlineAt           DateTime?
   completedAt          DateTime?
   reversedAt           DateTime?
   refundedAt           DateTime?
@@ -481,6 +566,8 @@ model Payment {
   @@unique([provider, clientReference])
   @@index([customerId, status])
   @@index([status, createdAt])
+  @@index([status, deadlineAt])
+  @@index([tenantId, status])
 }
 
 model PaymentAttempt {
@@ -504,6 +591,7 @@ model PaymentAttempt {
 model Router {
   id             String       @id @default(uuid())
   tenantId       String       @default("default")
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
   name           String
   vendor         RouterVendor
   host           String
@@ -712,6 +800,10 @@ model Job {
 /// and is null for system/worker actors (polymorphic, deliberately unenforced by FK).
 model AuditLog {
   id             String      @id @default(uuid())
+  /// Tenant the audited action belongs to. Null for platform-global actions
+  /// (system start/shutdown, cross-tenant owner actions). Company admins are
+  /// scoped to their own tenantId; the platform owner sees all.
+  tenantId       String?
   actorId        String?
   actorType      String // USER | CUSTOMER | SYSTEM | WORKER
   user           User?       @relation(fields: [actorId], references: [id])
@@ -727,11 +819,14 @@ model AuditLog {
 
   @@index([resourceType, resourceId, createdAt])
   @@index([actorType, actorId])
+  @@index([tenantId, createdAt])
   @@index([correlationId])
 }
 
 model Notification {
   id          String             @id @default(uuid())
+  tenantId    String             @default("default")
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
   customerId  String?
   customer    Customer?          @relation(fields: [customerId], references: [id])
   triggerType String // e.g. PAYMENT_CONFIRMED

@@ -112,6 +112,13 @@ export class ForbiddenError extends NexoraError {
   }
 }
 
+/** Raised when a company (tenant) is suspended/closed and cannot transact. */
+export class TenantUnavailableError extends NexoraError {
+  constructor(message = 'This company is not currently accepting activity.', correlationId?: CorrelationId) {
+    super({ code: 'TENANT_UNAVAILABLE', message, retryable: false, correlationId });
+  }
+}
+
 /** Wrapper for failures in external systems (routers, payment providers). */
 export class ExternalSystemError extends NexoraError {
   constructor(

@@ -1,9 +1,0 @@
-{
-  "/icon.svg/route": "/icon.svg",
-  "/_not-found/page": "/_not-found",
-  "/admin/page": "/admin",
-  "/auth/login/page": "/auth/login",
-  "/page": "/",
-  "/dashboard/page": "/dashboard",
-  "/packages/page": "/packages"
-}

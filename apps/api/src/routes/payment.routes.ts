@@ -11,7 +11,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ForbiddenError, NotFoundError, ValidationError } from '@nexora/domain';
+import { ForbiddenError, NotFoundError, TenantUnavailableError, ValidationError } from '@nexora/domain';
 import { MockPaymentProvider, normalizeKenyanMsisdn } from '@nexora/payment-sdk';
 import { activateOnPaymentSuccess } from '@nexora/engines';
 import type { NexoraContext } from '../context.js';
@@ -53,6 +53,10 @@ export function scheduleMockAutoConfirm(
   }, delay).unref();
 }
 
+/** How long a PENDING STK push may wait before reconciliation expires it.
+ *  M-Pesa prompts lapse after ~60s; we allow generous slack for callback lag. */
+export const STK_DEADLINE_MS = 3 * 60_000;
+
 const initiateSchema = z.object({
   packageId: z.string().uuid(),
   phone: z.string().optional(),
@@ -81,8 +85,16 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
       const input = parseOrThrow(initiateSchema, request.body, request.id);
       const customerId = request.principal!.subjectId;
 
-      const customer = await nexora.prisma.customer.findUnique({ where: { id: customerId } });
+      const customer = await nexora.prisma.customer.findUnique({
+        where: { id: customerId },
+        include: { tenant: { select: { status: true } } },
+      });
       if (customer === null) throw new NotFoundError('Customer', customerId, request.id);
+      // A suspended/closed company cannot collect — refuse before any STK push
+      // (autopsy F5). Existing customer tokens outlive a suspension otherwise.
+      if (customer.tenant.status === 'SUSPENDED' || customer.tenant.status === 'CLOSED') {
+        throw new TenantUnavailableError(undefined, request.id);
+      }
 
       const phone =
         input.phone !== undefined ? normalizeKenyanMsisdn(input.phone) : customer.phoneNumber;
@@ -90,11 +102,12 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
         throw new ValidationError('Invalid Kenyan phone number.', undefined, request.id);
       }
 
+      const tenantId = customer.tenantId;
       const pkg = await nexora.prisma.package.findUnique({
         where: { id: input.packageId },
         include: { policy: true },
       });
-      if (pkg === null || pkg.status !== 'ACTIVE') {
+      if (pkg === null || pkg.status !== 'ACTIVE' || pkg.tenantId !== tenantId) {
         throw new NotFoundError('Package', input.packageId, request.id);
       }
 
@@ -111,9 +124,12 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
         });
       }
 
-      // Reserve the payment row BEFORE the provider call (INITIATED).
+      // Reserve the payment row BEFORE the provider call (INITIATED). The
+      // deadline bounds how long a PENDING payment may wait before the
+      // reconciliation sweep closes it out (EXPIRED) — no payment hangs.
       const payment = await nexora.prisma.payment.create({
         data: {
+          tenantId,
           provider: 'MPESA',
           clientReference: input.idempotencyKey,
           customerId,
@@ -123,6 +139,7 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
           currency: pkg.currency,
           status: 'INITIATED',
           phoneNumber: phone,
+          deadlineAt: new Date(Date.now() + STK_DEADLINE_MS),
           correlationId: request.id,
         },
       });
@@ -138,7 +155,8 @@ export async function registerPaymentRoutes(app: FastifyInstance, nexora: Nexora
 
       let providerTransactionId: string;
       try {
-        const push = await nexora.payments.initiateStkPush({
+        const provider = await nexora.paymentsFor(tenantId);
+        const push = await provider.initiateStkPush({
           phoneNumber: phone,
           amountMinor: pkg.priceMinor,
           accountReference: 'NEXORA',

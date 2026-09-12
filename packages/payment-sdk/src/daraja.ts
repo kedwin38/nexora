@@ -22,11 +22,29 @@ import type {
   StkPushResponse,
 } from './provider.js';
 
+export type MpesaChannel = 'paybill' | 'till';
+
 export interface DarajaConfig {
   readonly env: 'sandbox' | 'production';
   readonly consumerKey: string;
   readonly consumerSecret: string;
+  /**
+   * BusinessShortCode used to build the STK password and Timestamp. For a
+   * paybill this is the paybill number; for Buy Goods it is the HEAD-OFFICE
+   * store number that owns the till (Safaricom calls it the store number).
+   */
   readonly shortcode: string;
+  /**
+   * Collection channel. `paybill` -> CustomerPayBillOnline (AccountReference
+   * meaningful). `till` -> CustomerBuyGoodsOnline (Buy Goods). Defaults to
+   * paybill for backward compatibility.
+   */
+  readonly channel?: MpesaChannel;
+  /**
+   * The party credited. For a till, this is the till number (may differ from
+   * the store `shortcode`). Defaults to `shortcode` when omitted.
+   */
+  readonly partyB?: string;
   readonly passkey: string;
   readonly callbackUrl: string;
   /** Injected for deterministic tests. */
@@ -44,6 +62,26 @@ interface StkCallbackBody {
       readonly CallbackMetadata?: { readonly Item?: Array<{ Name: string; Value?: unknown }> };
     };
   };
+}
+
+/**
+ * Terminal classification of an M-Pesa STK ResultCode. Every non-success code
+ * maps to exactly one terminal outcome so a payment is never left ambiguous:
+ *   - CANCELLED: the customer pressed cancel / declined the prompt (1032).
+ *   - TIMEOUT:   the prompt was never answered / expired (1037, 1019, 1025…).
+ *   - FAILED:    a hard rejection — wrong PIN, insufficient balance, etc.
+ * Reference: Safaricom Daraja STK result codes.
+ */
+export type StkOutcome = 'SUCCESS' | 'CANCELLED' | 'TIMEOUT' | 'FAILED';
+
+const CANCELLED_CODES = new Set([1032]);
+const TIMEOUT_CODES = new Set([1037, 1019, 1025, 1101]);
+
+export function classifyStkResultCode(code: number): StkOutcome {
+  if (code === 0) return 'SUCCESS';
+  if (CANCELLED_CODES.has(code)) return 'CANCELLED';
+  if (TIMEOUT_CODES.has(code)) return 'TIMEOUT';
+  return 'FAILED';
 }
 
 export function darajaTimestamp(date: Date): string {
@@ -129,6 +167,7 @@ export class MpesaDarajaProvider implements PaymentProvider {
   public async initiateStkPush(request: StkPushRequest): Promise<StkPushResponse> {
     const timestamp = darajaTimestamp(this.now());
     const password = darajaPassword(this.config.shortcode, this.config.passkey, timestamp);
+    const isTill = this.config.channel === 'till';
     const response = await this.fetchImpl(`${this.baseUrl}/mpesa/stkpush/v1/processrequest`, {
       method: 'POST',
       headers: {
@@ -139,10 +178,12 @@ export class MpesaDarajaProvider implements PaymentProvider {
         BusinessShortCode: this.config.shortcode,
         Password: password,
         Timestamp: timestamp,
-        TransactionType: 'CustomerPayBillOnline',
+        // Buy Goods (till) vs Pay Bill are distinct Daraja transaction types.
+        TransactionType: isTill ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline',
         Amount: Math.round(request.amountMinor / 100),
         PartyA: request.phoneNumber,
-        PartyB: this.config.shortcode,
+        // Till: credit the till number; Pay Bill: credit the paybill shortcode.
+        PartyB: isTill ? (this.config.partyB ?? this.config.shortcode) : this.config.shortcode,
         PhoneNumber: request.phoneNumber,
         CallBackURL: this.config.callbackUrl,
         AccountReference: request.accountReference.slice(0, 12),
@@ -180,17 +221,30 @@ export class MpesaDarajaProvider implements PaymentProvider {
         CheckoutRequestID: providerTransactionId,
       }),
     });
-    const data = (await response.json()) as { ResultCode?: string; ResultDesc?: string };
+    const data = (await response.json()) as {
+      ResultCode?: string;
+      ResultDesc?: string;
+      errorCode?: string;
+      errorMessage?: string;
+    };
+
+    // Still being processed — Daraja returns an errorCode, not a ResultCode.
+    if (data.ResultCode === undefined && data.errorCode === '500.001.1001') {
+      return { status: 'PENDING' };
+    }
     if (data.ResultCode === '0') {
       return { status: 'SUCCESS', providerTransactionId, receipt: providerTransactionId };
     }
-    if (data.ResultCode === '1032' || data.ResultCode === '1037') {
+    if (data.ResultCode === undefined) {
+      // Transient/unknown provider error — leave PENDING for the next cycle.
       return { status: 'PENDING' };
     }
+    const outcome = classifyStkResultCode(Number(data.ResultCode));
     return {
       status: 'FAILED',
       providerTransactionId,
-      reason: data.ResultDesc ?? `ResultCode ${data.ResultCode ?? 'unknown'}`,
+      reason: data.ResultDesc ?? `ResultCode ${data.ResultCode}`,
+      outcome: outcome === 'SUCCESS' ? 'FAILED' : outcome,
     };
   }
 

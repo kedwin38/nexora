@@ -6,9 +6,26 @@ Live project status. Read this first when resuming work. Update after every chec
 
 ## CurrentObjectives
 
-- **ALL persona §9 criteria ✅ (see docs/COMPLETION_AUDIT.md).** Unit 161/161 · E2E 37/37 · chaos/security 15/15 · live local stack verified.
-- TD-001…TD-009: **all resolved or planned** (TD-002 image prune, TD-003 audit FK, TD-006 node-routeros — all low, documented).
-- Remaining = **user-side ops only**: Railway vars + web/scheduler deploy, Daraja creds, MikroTik hardware verification, SMS gateway creds.
+- **Full-system autopsy complete — all findings fixed** (see
+  docs/AUTOPSY_FIXES.md). Network provisioning/reconciliation is now
+  tenant-scoped (F1/F2); webhook parses real Daraja regardless of platform
+  default (F3); double-activation race closed (F4); suspended tenants refused +
+  sessions revoked (F5); status filters validated (F6); signup off by default
+  (F7); AuditLog tenant-scoped (F10).
+- **Multi-tenancy + platform owner + full M-Pesa lifecycle SHIPPED.** Unit
+  178/178 · **E2E 56/56** (adds provisioning isolation, real-Daraja parse,
+  suspension, concurrent-activation) · chaos/security 15/15 · lint + typecheck clean.
+- Companies self-signup and are isolated; each brings its own paybill/till and
+  encrypted Daraja credentials (ADR-013). Platform owner governs all tenants
+  (`/api/v1/platform/*`). No payment is left hanging — reconciliation closes
+  every payment SUCCESS/CANCELLED/EXPIRED/FAILED (scheduler runs it every 2m).
+- User guides: docs/USER_GUIDE.md, docs/ROUTER_SETUP.md (MikroTik+Tenda
+  commands), docs/PAYMENTS.md, docs/MULTI_TENANCY.md; portal has Owner + Guide
+  + Settings (M-Pesa) screens.
+- **ALL persona §9 criteria ✅ (see docs/COMPLETION_AUDIT.md).** chaos/security 15/15.
+- Remaining = **user-side ops only**: Railway vars (incl.
+  CREDENTIALS_ENCRYPTION_KEY, PLATFORM_OWNER_*, PUBLIC_BASE_URL), web/scheduler
+  deploy, real Daraja creds, MikroTik hardware verification, SMS gateway creds.
 
 ## BuildOrder (from persona §6 — sequential, do not skip)
 
@@ -81,9 +98,11 @@ See docs/technical-debt.md — TD-001 (web deps deferred), TD-002 (Docker runtim
 
 ## ValidationStatus
 
-- [x] TypeScript strict typecheck — 13 workspaces, exit 0 (after Stage 2–4 code)
+- [x] TypeScript strict typecheck — all workspaces, exit 0 (incl. multi-tenancy)
 - [x] ESLint — exit 0
-- [x] Vitest — **140/140** (8 files)
+- [x] Vitest — **178/178** (13 files)
+- [x] **`npm run e2e` — 48/48 PASS** (adds company signup, tenant isolation,
+      platform owner, encrypted till config, payment cancel + timeout closure)
 - [x] Bundles ×4 — build clean (argon2 external)
 - [x] **`npm run e2e` — 25/25 PASS** (full control loop: purchase→authorize→usage session→FUP throttle (desired v2, verified op)→reconciliation synchronized→expiry deauth (verified)→customer-visible state; duplicate-callback no-op; RBAC 403)
 - [x] Prisma schema valid + client generated + initial migration regenerated (Payment↔Package relation)

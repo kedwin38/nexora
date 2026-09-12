@@ -232,30 +232,55 @@ async function main(): Promise<void> {
   async function executeJob(job: { id: string; type: string }): Promise<void> {
     let result: string;
     try {
-      const router = await prisma.router.findFirst({ orderBy: { createdAt: 'asc' } });
-      if (router === null) {
+      // Run the cycle for EVERY registered router (each cycle is tenant-scoped
+      // by the router's own tenantId, autopsy F2) — not just the oldest one.
+      const routers = await prisma.router.findMany({ orderBy: { createdAt: 'asc' } });
+      if (routers.length === 0) {
         result = 'no-routers-registered';
       } else {
-        const adapter = await resolveAdapter(prisma, mode, mockRouter, router.id);
-        switch (job.type) {
-          case 'usage-sync': {
-            const summary = await runUsageSyncCycle(prisma, router.id, adapter);
-            result = `seen=${summary.sessionsSeen} created=${summary.sessionsCreated} ended=${summary.sessionsEnded} bytes=${summary.bytesAccounted.toString()}`;
-            break;
+        let checked = 0;
+        let created = 0;
+        let ended = 0;
+        let drifted = 0;
+        let repaired = 0;
+        let online = 0;
+        const errors: string[] = [];
+        for (const router of routers) {
+          try {
+            const adapter = await resolveAdapter(prisma, mode, mockRouter, router.id);
+            switch (job.type) {
+              case 'usage-sync': {
+                const s = await runUsageSyncCycle(prisma, router.id, adapter);
+                created += s.sessionsCreated;
+                ended += s.sessionsEnded;
+                break;
+              }
+              case 'network-reconciliation': {
+                const s = await runReconciliationCycle(prisma, router.id, adapter);
+                checked += s.checked;
+                drifted += s.drifted;
+                repaired += s.repaired;
+                break;
+              }
+              case 'router-health': {
+                const s = await runRouterHealthCheck(prisma, router.id, adapter);
+                if (s.status === 'ONLINE') online += 1;
+                break;
+              }
+              default:
+                throw new Error(`network-worker cannot execute job type '${job.type}'`);
+            }
+          } catch (e) {
+            errors.push(`${router.id}:${(e as Error).message}`);
           }
-          case 'network-reconciliation': {
-            const summary = await runReconciliationCycle(prisma, router.id, adapter);
-            result = `checked=${summary.checked} drifted=${summary.drifted} repaired=${summary.repaired}`;
-            break;
-          }
-          case 'router-health': {
-            const summary = await runRouterHealthCheck(prisma, router.id, adapter);
-            result = `status=${summary.status} changed=${summary.statusChanged}`;
-            break;
-          }
-          default:
-            throw new Error(`network-worker cannot execute job type '${job.type}'`);
         }
+        result =
+          job.type === 'usage-sync'
+            ? `routers=${routers.length} created=${created} ended=${ended}`
+            : job.type === 'network-reconciliation'
+              ? `routers=${routers.length} checked=${checked} drifted=${drifted} repaired=${repaired}`
+              : `routers=${routers.length} online=${online}`;
+        if (errors.length > 0) result += ` errors=${errors.length}`;
       }
       await prisma.job.update({
         where: { id: job.id },

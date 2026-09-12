@@ -43,13 +43,20 @@ Both stay **private** (do not enable public TCP proxy).
 | `NODE_ENV` | `production` |
 | `APP_ENV` | `production` |
 | `LOG_LEVEL` | `info` |
-| `ADMIN_EMAIL` | super-admin email (used by one-time seed, step 4) |
-| `ADMIN_PASSWORD` | super-admin password — **delete the variable after seeding** |
+| `ADMIN_EMAIL` | default-tenant super-admin email (used by one-time seed, step 4) |
+| `ADMIN_PASSWORD` | default-tenant super-admin password — **delete after seeding** |
+| `PLATFORM_OWNER_EMAIL` | platform-owner email (governs all companies; seeded step 4) |
+| `PLATFORM_OWNER_PASSWORD` | platform-owner password — **delete after seeding** |
+| `CREDENTIALS_ENCRYPTION_KEY` | ≥32-char key for tenant M-Pesa creds at rest — `openssl rand -hex 32` (ADR-013) |
+| `PUBLIC_BASE_URL` | `https://<api-domain>` — builds M-Pesa callback URLs |
+| `ALLOW_TENANT_SIGNUP` | `true` to allow public company self-signup (default true) |
 
 `PORT` is injected by Railway automatically and honored by the app.
 
-> M-Pesa variables (`MPESA_*`) are **not required yet** — payments land in Stage 3.
-> The API boots without them by design.
+> M-Pesa variables (`MPESA_*`) are the **platform default** only. Each company
+> configures its own paybill/till + Daraja credentials in-app (Admin →
+> Settings → Payments), stored encrypted under `CREDENTIALS_ENCRYPTION_KEY`.
+> The API boots without any `MPESA_*` set.
 
 ### `worker`, `network-worker`, `scheduler` (private services)
 
@@ -59,6 +66,8 @@ Both stay **private** (do not enable public TCP proxy).
 | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
 | `NODE_ENV` | `production` |
 | `LOG_LEVEL` | `info` |
+| `CREDENTIALS_ENCRYPTION_KEY` | same value as on `api` — the worker decrypts tenant creds during payment reconciliation |
+| `MPESA_CALLBACK_URL` | `https://<api-domain>/api/v1/webhooks/mpesa` — reconciliation fallback callback |
 
 ## 3. Service settings
 

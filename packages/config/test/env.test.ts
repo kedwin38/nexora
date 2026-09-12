@@ -66,4 +66,35 @@ describe('parseEnv', () => {
     const result = baseEnvSchema.safeParse({ LOG_LEVEL: 'loud' });
     expect(result.success).toBe(false);
   });
+
+  describe('PUBLIC_BASE_URL is forgiving', () => {
+    const withBase = (publicBaseUrl?: string): Record<string, string | undefined> => ({
+      ...validBase,
+      DATABASE_URL: 'postgresql://u:p@h:5432/d',
+      REDIS_URL: 'redis://localhost:6379',
+      SESSION_SECRET: 'a-session-secret-that-is-long-enough-0123456789',
+      ...(publicBaseUrl === undefined ? {} : { PUBLIC_BASE_URL: publicBaseUrl }),
+    });
+
+    it('prepends https:// to a bare hostname', () => {
+      const env = parseEnv(apiEnvSchema, withBase('my-api.up.railway.app'));
+      expect(env.PUBLIC_BASE_URL).toBe('https://my-api.up.railway.app');
+    });
+
+    it('keeps an explicit scheme and strips a trailing slash', () => {
+      const env = parseEnv(apiEnvSchema, withBase('https://api.nexora.co.ke/'));
+      expect(env.PUBLIC_BASE_URL).toBe('https://api.nexora.co.ke');
+    });
+
+    it('treats empty / whitespace as unset rather than crashing', () => {
+      expect(parseEnv(apiEnvSchema, withBase('')).PUBLIC_BASE_URL).toBeUndefined();
+      expect(parseEnv(apiEnvSchema, withBase('   ')).PUBLIC_BASE_URL).toBeUndefined();
+      expect(parseEnv(apiEnvSchema, withBase(undefined)).PUBLIC_BASE_URL).toBeUndefined();
+    });
+
+    it('still rejects a value that is not a URL (e.g. an unfilled placeholder)', () => {
+      const result = apiEnvSchema.safeParse(withBase('<the api domain>'));
+      expect(result.success).toBe(false);
+    });
+  });
 });

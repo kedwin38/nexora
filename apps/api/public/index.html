@@ -7,671 +7,317 @@
 <title>NEXORA // ISP OS</title>
 <style>
   :root {
-    --bg: #06080d; --panel: #0b0f17; --panel2: #0e1420; --line: #1a2332;
-    --txt: #d7e0ee; --dim: #6b7a90; --acc: #38e1c4; --warn: #f5c451; --crit: #f26d6d;
-    --mono: ui-monospace, "Cascadia Code", Consolas, monospace; --sans: "Segoe UI", system-ui, sans-serif;
+    --bg: #06080d; --bg2:#080b12; --panel: #0b0f17; --panel2: #0e1420; --line: #1a2332; --line2:#243247;
+    --txt: #d7e0ee; --dim: #6b7a90; --dim2:#8a99ad; --acc: #38e1c4; --acc2:#2bb6d6; --warn: #f5c451; --crit: #f26d6d; --good:#57d98e; --purple:#9b8cff;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace; --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --r: 8px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--txt); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+  html,body { height:100%; }
+  body { background: radial-gradient(1200px 600px at 80% -10%, #0c1524 0, var(--bg) 55%) fixed, var(--bg); color: var(--txt); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
   a { color: var(--acc); text-decoration: none; }
   .mono { font-family: var(--mono); }
-  header { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 10; }
-  header .brand { font-family: var(--mono); letter-spacing: 3px; font-size: 16px; color: var(--acc); }
-  header .brand small { color: var(--dim); letter-spacing: 1px; }
-  nav a { margin-left: 18px; font-family: var(--mono); font-size: 12px; color: var(--dim); text-transform: uppercase; }
-  nav a.active, nav a:hover { color: var(--acc); }
-  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
-  h1 { font-size: 20px; margin-bottom: 4px; letter-spacing: 1px; }
-  .sub { color: var(--dim); font-size: 12px; font-family: var(--mono); margin-bottom: 24px; }
+  .dim { color: var(--dim); } .dim2 { color: var(--dim2); }
+  header { display: flex; justify-content: space-between; align-items: center; gap:12px; padding: 12px 22px; border-bottom: 1px solid var(--line); background: rgba(11,15,23,.85); backdrop-filter: blur(8px); position: sticky; top: 0; z-index: 30; }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .brand .logo { width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--acc),var(--acc2)); box-shadow:0 0 18px rgba(56,225,196,.4); }
+  .brand b { font-family: var(--mono); letter-spacing: 3px; font-size: 15px; color: var(--txt); }
+  .brand small { color: var(--dim); letter-spacing: 1px; font-family:var(--mono); font-size:10px; }
+  nav { display:flex; gap:4px; flex-wrap:wrap; }
+  nav a { padding:7px 12px; border-radius:6px; font-family: var(--mono); font-size: 11px; color: var(--dim2); text-transform: uppercase; letter-spacing:.5px; }
+  nav a:hover { color: var(--txt); background: var(--panel2); }
+  nav a.active { color: var(--acc); background: rgba(56,225,196,.08); }
+  .usermenu { display:flex; align-items:center; gap:10px; }
+  .avatar { width:30px;height:30px;border-radius:50%;background:var(--panel2);border:1px solid var(--line2); display:flex;align-items:center;justify-content:center; font-family:var(--mono); font-size:12px; color:var(--acc); }
+  .who { text-align:right; line-height:1.25; }
+  .who .n { font-size:12px; } .who .r { font-size:10px; color:var(--dim); font-family:var(--mono); text-transform:uppercase; }
+  main { max-width: 1240px; margin: 0 auto; padding: 26px 22px 60px; }
+  h1 { font-size: 20px; margin-bottom: 3px; letter-spacing: .5px; }
+  .sub { color: var(--dim); font-size: 12px; font-family: var(--mono); margin-bottom: 22px; }
   .grid { display: grid; gap: 14px; }
-  .grid.c4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-  .grid.c2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
-  .card .k { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-family: var(--mono); }
-  .card .v { font-family: var(--mono); font-size: 22px; margin-top: 6px; }
-  .card .v.ok { color: var(--acc); } .card .v.warn { color: var(--warn); } .card .v.crit { color: var(--crit); }
+  .grid.c2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .grid.c3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .grid.c4 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .card { background: linear-gradient(180deg, var(--panel), var(--bg2)); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; }
+  .card.hover:hover { border-color: var(--line2); }
+  .k { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1.4px; font-family: var(--mono); }
+  .v { font-family: var(--mono); font-size: 24px; margin-top: 6px; font-weight:600; }
+  .v.sm { font-size:18px; }
+  .v.ok { color: var(--good); } .v.acc { color: var(--acc); } .v.warn { color: var(--warn); } .v.crit { color: var(--crit); }
+  .stat-sub { font-size:11px; color:var(--dim); font-family:var(--mono); margin-top:4px; }
   table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
   th { text-align: left; color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; padding: 8px; border-bottom: 1px solid var(--line); }
-  td { padding: 8px; border-bottom: 1px solid var(--line); color: var(--txt); }
+  td { padding: 9px 8px; border-bottom: 1px solid var(--line); color: var(--txt); vertical-align:middle; }
   tr:hover td { background: var(--panel2); }
-  .pill { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; letter-spacing: 1px; }
-  .pill.SUCCESS, .pill.ACTIVE, .pill.COMPLETED, .pill.ok { background: rgba(56,225,196,.12); color: var(--acc); border: 1px solid rgba(56,225,196,.4); }
-  .pill.PENDING, .pill.PROCESSING, .pill.VERIFYING, .pill.STK { background: rgba(245,196,81,.1); color: var(--warn); border: 1px solid rgba(245,196,81,.4); }
-  .pill.FAILED, .pill.PERMANENT_FAILURE, .pill.crit { background: rgba(242,109,109,.1); color: var(--crit); border: 1px solid rgba(242,109,109,.4); }
-  .pill.RETRYING { background: rgba(56,225,196,.08); color: var(--dim); border: 1px solid var(--line); }
-  input, button { font-family: var(--mono); font-size: 13px; }
-  input { width: 100%; background: var(--bg); color: var(--txt); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; }
-  input:focus { outline: none; border-color: var(--acc); }
-  button { background: var(--acc); color: #04110d; border: none; border-radius: 4px; padding: 10px 16px; font-weight: 700; cursor: pointer; width: 100%; letter-spacing: 1px; }
-  button:hover { filter: brightness(1.15); } button:disabled { opacity: .5; cursor: wait; }
-  button.ghost { background: transparent; color: var(--acc); border: 1px solid var(--line); width: auto; padding: 4px 10px; font-size: 11px; }
-  .pkg { cursor: pointer; border: 1px solid var(--line); border-radius: 6px; padding: 14px; background: var(--panel); }
-  .pkg.sel { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
-  .pkg .name { font-family: var(--mono); font-size: 14px; color: var(--txt); }
-  .pkg .price { font-family: var(--mono); font-size: 20px; color: var(--acc); margin-top: 4px; }
-  .pkg .meta { color: var(--dim); font-size: 11px; font-family: var(--mono); margin-top: 6px; }
-  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; }
-  .tabs button { width: auto; background: transparent; color: var(--dim); border: 1px solid var(--line); padding: 6px 14px; font-size: 11px; }
-  .tabs button.active { color: var(--acc); border-color: var(--acc); }
-  .c3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-  select { background: var(--bg); color: var(--txt); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font-family: var(--mono); margin-bottom: 12px; width: 100%; }
-  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--acc); color: var(--txt); padding: 12px 16px; border-radius: 6px; font-family: var(--mono); font-size: 12px; display: none; max-width: 380px; z-index: 99; }
-  .err { border-color: var(--crit) !important; }
-  .hide { display: none !important; }
-  footer { text-align: center; color: var(--dim); font-family: var(--mono); font-size: 10px; padding: 40px 0; letter-spacing: 2px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; letter-spacing: .5px; font-family:var(--mono); border:1px solid transparent; }
+  .pill.ok,.pill.SUCCESS,.pill.ACTIVE,.pill.PAID,.pill.ONLINE,.pill.CONFIRMED { background: rgba(87,217,142,.12); color: var(--good); border-color: rgba(87,217,142,.35); }
+  .pill.warn,.pill.PENDING,.pill.PROCESSING,.pill.VERIFYING,.pill.TRIALING,.pill.PAST_DUE,.pill.OVERDUE,.pill.FUP,.pill.WARNING { background: rgba(245,196,81,.1); color: var(--warn); border-color: rgba(245,196,81,.35); }
+  .pill.crit,.pill.FAILED,.pill.PERMANENT_FAILURE,.pill.CANCELLED,.pill.EXPIRED,.pill.SUSPENDED,.pill.OFFLINE,.pill.CRITICAL,.pill.CLOSED { background: rgba(242,109,109,.1); color: var(--crit); border-color: rgba(242,109,109,.35); }
+  .pill.INFO,.pill.RETRYING,.pill.DRAFT { background: rgba(56,225,196,.06); color: var(--dim2); border-color: var(--line2); }
+  input, button, select, textarea { font-family: var(--mono); font-size: 13px; }
+  label.f { display:block; font-family:var(--mono); font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin:10px 0 4px; }
+  input, select, textarea { width: 100%; background: var(--bg); color: var(--txt); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin-bottom: 4px; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--acc); box-shadow:0 0 0 3px rgba(56,225,196,.08); }
+  button { background: linear-gradient(135deg,var(--acc),var(--acc2)); color: #04110d; border: none; border-radius: 6px; padding: 10px 16px; font-weight: 700; cursor: pointer; letter-spacing: .5px; }
+  button:hover { filter: brightness(1.1); } button:disabled { opacity: .5; cursor: wait; }
+  button.wide { width:100%; margin-top:8px; }
+  button.ghost { background: transparent; color: var(--acc); border: 1px solid var(--line2); padding: 6px 12px; font-size: 11px; font-weight:600; }
+  button.ghost:hover { border-color:var(--acc); background:rgba(56,225,196,.06); }
+  button.danger { background: transparent; color: var(--crit); border:1px solid rgba(242,109,109,.4); padding:6px 12px; font-size:11px; }
+  button.mini { padding:4px 9px; font-size:10px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 18px; border-bottom:1px solid var(--line); padding-bottom:2px; }
+  .tabs button { width: auto; background: transparent; color: var(--dim2); border: 1px solid transparent; border-radius:6px 6px 0 0; padding: 8px 14px; font-size: 11px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; }
+  .tabs button.active { color: var(--acc); border-color: var(--line); border-bottom-color:var(--bg); background:var(--panel); }
+  .pkg, .plan { cursor: pointer; border: 1px solid var(--line); border-radius: var(--r); padding: 16px; background: var(--panel); transition:.12s; }
+  .pkg:hover,.plan:hover { border-color:var(--line2); }
+  .pkg.sel, .plan.sel { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+  .pkg .name, .plan .name { font-family: var(--mono); font-size: 14px; }
+  .pkg .price, .plan .price { font-family: var(--mono); font-size: 22px; color: var(--acc); margin-top: 6px; }
+  .plan .price small { font-size:11px; color:var(--dim); }
+  .plan ul { list-style:none; margin-top:10px; font-size:11px; color:var(--dim2); }
+  .plan li { padding:3px 0; padding-left:16px; position:relative; }
+  .plan li:before { content:"✓"; color:var(--acc); position:absolute; left:0; }
+  #toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--acc); color: var(--txt); padding: 12px 16px; border-radius: 8px; font-family: var(--mono); font-size: 12px; display: none; max-width: 380px; z-index: 99; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .spacer { flex:1; }
+  .muted-card { background:var(--bg2); border:1px dashed var(--line2); border-radius:var(--r); padding:14px; color:var(--dim); font-family:var(--mono); font-size:12px; }
+  .sev-dot { width:8px;height:8px;border-radius:50%; display:inline-block; margin-right:6px; }
+  .sev-CRITICAL{background:var(--crit);} .sev-WARNING{background:var(--warn);} .sev-INFO{background:var(--acc);}
+  .bars { display:flex; align-items:flex-end; gap:4px; height:80px; }
+  .bars .bar { flex:1; background:linear-gradient(180deg,var(--acc),rgba(43,182,214,.25)); border-radius:3px 3px 0 0; min-height:2px; position:relative; }
+  .bars .bar:hover:after { content:attr(data-label); position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:var(--panel2); border:1px solid var(--line2); padding:2px 6px; border-radius:4px; font-size:10px; font-family:var(--mono); white-space:nowrap; margin-bottom:4px; }
+  footer { text-align: center; color: var(--dim); font-family: var(--mono); font-size: 10px; padding: 30px 0; letter-spacing: 2px; }
+  .hide{display:none!important;}
+  @media (max-width:640px){ header{flex-wrap:wrap;} .who{display:none;} }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">NEXORA <small>// ISP OS</small></div>
-  <nav id="nav">
-    <a href="/dashboard" data-p="dashboard">Dashboard</a>
-    <a href="/packages" data-p="packages">Packages</a>
-    <a href="/guest" data-p="guest">Guest</a>
-    <a href="/admin" data-p="admin">Admin</a>
-    <a href="/owner" data-p="owner">Owner</a>
-    <a href="/guide" data-p="guide">Guide</a>
-  </nav>
+  <div class="brand"><div class="logo"></div><div><b>NEXORA</b><br><small>ISP OPERATING SYSTEM</small></div></div>
+  <nav id="nav"></nav>
+  <div class="usermenu" id="usermenu"></div>
 </header>
-<main id="view"><div class="card mono">LOADING…</div></main>
+<main id="view"><div class="card mono dim">LOADING…</div></main>
 <div id="toast"></div>
-<footer>NEXORA ISP OS // CONTROL PLANE // PHASE 1</footer>
+<footer>NEXORA ISP OS // MULTI-TENANT CONTROL PLANE</footer>
 
 <script>
 const API = '';
 const $ = (s) => document.querySelector(s);
 const store = {
-  get: (k) => JSON.parse(localStorage.getItem('nexora_' + k) || 'null'),
+  get: (k) => { try { return JSON.parse(localStorage.getItem('nexora_' + k) || 'null'); } catch { return null; } },
   set: (k, v) => localStorage.setItem('nexora_' + k, JSON.stringify(v)),
   del: (k) => localStorage.removeItem('nexora_' + k),
 };
+let ME = null; // cached staff identity+permissions
+
 function toast(msg, isErr = false) {
-  const t = $('#toast');
-  t.textContent = msg;
+  const t = $('#toast'); t.textContent = msg;
   t.style.borderColor = isErr ? 'var(--crit)' : 'var(--acc)';
-  t.style.display = 'block';
-  setTimeout(() => (t.style.display = 'none'), 5000);
+  t.style.display = 'block'; clearTimeout(toast._t);
+  toast._t = setTimeout(() => (t.style.display = 'none'), 5000);
 }
 async function api(path, opts = {}) {
   const token = store.get('user_token') || store.get('customer_token');
-  const res = await fetch(API + path, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: 'Bearer ' + token } : {}),
-      ...(opts.headers || {}),
-    },
-  });
+  const res = await fetch(API + path, { ...opts, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(opts.headers || {}) } });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401 && store.get('user_token')) { /* token invalid */ }
   if (!res.ok) throw new Error(body?.error?.message || body?.message || 'HTTP ' + res.status);
   return body;
 }
-function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
-function pill(v) { return '<span class="pill ' + esc(v) + '">' + esc(v) + '</span>'; }
-function fmtKes(minor) { return 'KES ' + (Number(minor || 0) / 100).toFixed(2); }
-function fmtWhen(iso) { return iso ? new Date(iso).toLocaleString() : '—'; }
+const esc = (s) => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+const pill = (v) => '<span class="pill ' + esc(v) + '">' + esc(v) + '</span>';
+const fmtKes = (minor) => 'KES ' + (Number(minor || 0) / 100).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const fmtWhen = (iso) => iso ? new Date(iso).toLocaleString() : '—';
+const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString() : '—';
+const gb = (b) => (Number(b) / 1024 ** 3).toFixed(1) + 'GB';
 
-// ---------- Views ----------
+function barChart(series, fmt) {
+  const max = Math.max(1, ...series.map(s => s.v));
+  return '<div class="bars">' + series.map(s => `<div class="bar" style="height:${Math.round((s.v/max)*100)}%" data-label="${esc(s.label)}: ${fmt ? fmt(s.v) : s.v}"></div>`).join('') + '</div>';
+}
+function can(p) { return ME && ME.permissions && ME.permissions.includes(p); }
+function isOwner() { return ME && ME.user && ME.user.role === 'PLATFORM_OWNER'; }
+
+async function loadMe() {
+  if (!store.get('user_token')) { ME = null; return null; }
+  try { ME = await api('/api/v1/auth/me'); store.set('user', ME.user); return ME; }
+  catch { store.del('user_token'); ME = null; return null; }
+}
+function logout() {
+  api('/api/v1/auth/logout', { method: 'POST' }).catch(() => {});
+  store.del('user_token'); store.del('customer_token'); store.del('user'); ME = null;
+  location.href = '/auth/login';
+}
+
+// ---------- Chrome (header nav + user menu) ----------
+function renderChrome(active) {
+  const nav = $('#nav'); const um = $('#usermenu');
+  const staff = store.get('user_token'); const cust = store.get('customer_token');
+  let links = [];
+  if (cust) links = [['/dashboard','Dashboard'],['/packages','Packages']];
+  else if (isOwner()) links = [['/owner','Owner'],['/guide','Guide']];
+  else if (staff) {
+    links = [['/admin','Admin']];
+    links.push(['/guide','Guide']);
+  } else links = [['/auth/login','Sign in'],['/guest','Guest wifi'],['/guide','Guide']];
+  nav.innerHTML = links.map(([h,l]) => `<a href="${h}" class="${location.pathname===h?'active':''}">${l}</a>`).join('');
+  if (staff && ME && ME.user) {
+    const init = (ME.user.displayName || ME.user.email || '?').slice(0,1).toUpperCase();
+    um.innerHTML = `<div class="who"><div class="n">${esc(ME.user.displayName||ME.user.email)}</div><div class="r">${esc(ME.user.role)}${ME.tenant?' · '+esc(ME.tenant.name):''}</div></div><div class="avatar">${init}</div><button class="ghost mini" id="logout">LOGOUT</button>`;
+    $('#logout').onclick = logout;
+  } else if (cust) {
+    um.innerHTML = `<button class="ghost mini" id="logoutc">LOGOUT</button>`;
+    $('#logoutc').onclick = () => { store.del('customer_token'); location.href='/auth/login'; };
+  } else um.innerHTML = '';
+}
+
 const views = {};
 
+// ---------- LOGIN + SIGNUP ----------
 views.login = () => {
-  const staff = !!store.get('user_token');
   $('#view').innerHTML = `
-    <h1>${staff ? 'OPERATOR' : 'NEXORA'} ACCESS</h1>
-    <div class="sub">// multi-tenant ISP control plane — sign in, or start a company</div>
+    <h1>Welcome to NEXORA</h1>
+    <div class="sub">// the multi-tenant ISP operating system</div>
     <div class="grid c2">
       <div class="card">
-        <div class="k">Operator / Staff Login</div><br>
-        <input id="a-email" placeholder="admin@yourcompany.co.ke" />
-        <input id="a-pass" type="password" placeholder="password" />
-        <button id="a-go">AUTHENTICATE</button>
-        <p class="sub" style="margin-top:10px">Company admins + the platform owner sign in here.</p>
+        <div class="k">Operator / Owner sign in</div>
+        <label class="f">Email</label><input id="a-email" placeholder="you@company.co.ke" />
+        <label class="f">Password</label><input id="a-pass" type="password" placeholder="••••••••" />
+        <button class="wide" id="a-go">SIGN IN</button>
+        <p class="sub" style="margin-top:12px">Company admins &amp; the platform owner sign in here.</p>
       </div>
       <div class="card">
-        <div class="k">Customer Access</div><br>
-        <input id="c-tenant" placeholder="company handle (optional, e.g. acme-fibre)" />
-        <input id="c-phone" placeholder="0712345678" />
-        <input id="c-pass" type="password" placeholder="password (min 8 chars)" />
-        <button id="c-login">SIGN IN</button>
-        <button class="ghost" id="c-reg" style="width:100%;margin-top:8px">CREATE ACCOUNT</button>
+        <div class="k">Customer access</div>
+        <label class="f">Company handle (optional)</label><input id="c-tenant" placeholder="acme-fibre" />
+        <label class="f">Phone</label><input id="c-phone" placeholder="0712345678" />
+        <label class="f">Password</label><input id="c-pass" type="password" placeholder="••••••••" />
+        <div class="row"><button id="c-login" style="flex:1">SIGN IN</button><button class="ghost" id="c-reg">CREATE</button></div>
       </div>
     </div>
     <br/>
     <div class="card">
-      <div class="k">Start a company on NEXORA (free trial)</div><br>
-      <div class="grid c2">
-        <div>
-          <input id="s-company" placeholder="Company name (e.g. Acme Fibre)" />
-          <input id="s-name" placeholder="Your name" />
-          <input id="s-phone" placeholder="Contact phone (optional)" />
-        </div>
-        <div>
-          <input id="s-email" placeholder="Admin email" />
-          <input id="s-pass" type="password" placeholder="Admin password (min 10 chars)" />
-          <button id="s-go">CREATE COMPANY →</button>
-        </div>
+      <div class="k">Start your ISP on NEXORA — 14-day free trial</div>
+      <div class="grid c2" style="margin-top:8px">
+        <div><label class="f">Company name</label><input id="s-company" placeholder="Acme Fibre" />
+          <label class="f">Your name</label><input id="s-name" placeholder="Jane Doe" />
+          <label class="f">Contact phone</label><input id="s-phone" placeholder="0712345678" /></div>
+        <div><label class="f">Admin email</label><input id="s-email" placeholder="admin@acmefibre.co.ke" />
+          <label class="f">Admin password (min 10)</label><input id="s-pass" type="password" placeholder="••••••••••" />
+          <button class="wide" id="s-go" style="margin-top:22px">CREATE COMPANY →</button></div>
       </div>
-      <p class="sub" style="margin-top:8px">You become your company's SUPER_ADMIN with a ready-to-sell starter catalogue. Configure M-Pesa under Admin → Settings.</p>
+      <p class="sub" style="margin-top:8px">You become your company's SUPER_ADMIN with a ready-to-sell catalogue. Configure M-Pesa in Admin → Settings.</p>
     </div>`;
   $('#a-go').onclick = async () => {
-    try {
-      const r = await api('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email: $('#a-email').value, password: $('#a-pass').value }) });
-      store.set('user_token', r.token); store.set('user', r.user); store.del('customer_token');
-      location.href = r.user?.role === 'PLATFORM_OWNER' ? '/owner' : '/admin';
-    } catch (e) { toast(e.message, true); }
-  };
+    try { const r = await api('/api/v1/auth/login',{method:'POST',body:JSON.stringify({email:$('#a-email').value,password:$('#a-pass').value})});
+      store.set('user_token',r.token); store.set('user',r.user); store.del('customer_token');
+      location.href = r.user?.role==='PLATFORM_OWNER'?'/owner':'/admin'; } catch(e){ toast(e.message,true); } };
   $('#c-login').onclick = async () => {
-    try {
-      const tenant = $('#c-tenant').value.trim() || undefined;
-      const r = await api('/api/v1/customers/login', { method: 'POST', body: JSON.stringify({ phone: $('#c-phone').value, password: $('#c-pass').value, tenant }) });
-      store.set('customer_token', r.token); store.del('user_token');
-      location.href = '/dashboard';
-    } catch (e) { toast(e.message, true); }
-  };
+    try { const t=$('#c-tenant').value.trim()||undefined; const r=await api('/api/v1/customers/login',{method:'POST',body:JSON.stringify({phone:$('#c-phone').value,password:$('#c-pass').value,tenant:t})});
+      store.set('customer_token',r.token); store.del('user_token'); location.href='/dashboard'; } catch(e){ toast(e.message,true); } };
   $('#c-reg').onclick = async () => {
-    try {
-      const tenant = $('#c-tenant').value.trim() || undefined;
-      const r = await api('/api/v1/customers/register', { method: 'POST', body: JSON.stringify({ phone: $('#c-phone').value, password: $('#c-pass').value, tenant }) });
-      store.set('customer_token', r.token); store.del('user_token');
-      toast('Account created.');
-      location.href = '/dashboard';
-    } catch (e) { toast(e.message, true); }
-  };
+    try { const t=$('#c-tenant').value.trim()||undefined; const r=await api('/api/v1/customers/register',{method:'POST',body:JSON.stringify({phone:$('#c-phone').value,password:$('#c-pass').value,tenant:t})});
+      store.set('customer_token',r.token); store.del('user_token'); toast('Account created.'); location.href='/dashboard'; } catch(e){ toast(e.message,true); } };
   $('#s-go').onclick = async () => {
-    try {
-      const r = await api('/api/v1/tenants/signup', { method: 'POST', body: JSON.stringify({
-        companyName: $('#s-company').value, adminName: $('#s-name').value,
-        adminEmail: $('#s-email').value, adminPassword: $('#s-pass').value,
-        contactPhone: $('#s-phone').value || undefined,
-      })});
-      store.set('user_token', r.token); store.set('user', r.user); store.del('customer_token');
-      toast('Company created — welcome to NEXORA.');
-      location.href = '/admin';
-    } catch (e) { toast(e.message, true); }
-  };
+    try { const r=await api('/api/v1/tenants/signup',{method:'POST',body:JSON.stringify({companyName:$('#s-company').value,adminName:$('#s-name').value,adminEmail:$('#s-email').value,adminPassword:$('#s-pass').value,contactPhone:$('#s-phone').value||undefined})});
+      store.set('user_token',r.token); store.set('user',r.user); store.del('customer_token'); toast('Welcome to NEXORA!'); location.href='/admin'; } catch(e){ toast(e.message,true); } };
 };
 
+// ---------- CUSTOMER DASHBOARD ----------
 views.dashboard = async () => {
-  if (!store.get('customer_token')) return views.login();
-  let me;
-  try { me = await api('/api/v1/customers/me'); } catch (e) { store.del('customer_token'); return views.login(); }
-  const sub = me.subscription;
-  const snap = sub?.policySnapshot || {};
+  if (!store.get('customer_token')) return location.href='/auth/login';
+  let me; try { me = await api('/api/v1/customers/me'); } catch { store.del('customer_token'); return location.href='/auth/login'; }
+  const sub = me.subscription; const snap = sub?.policySnapshot || {}; const fup = me.fup;
   $('#view').innerHTML = `
-    <h1>CUSTOMER DASHBOARD</h1>
-    <div class="sub">// ${esc(me.customer.customerNumber)} · ${esc(me.customer.phone || '')}</div>
+    <h1>My Internet</h1><div class="sub">// ${esc(me.customer.customerNumber)} · ${esc(me.customer.phone||'')}</div>
     <div class="grid c4">
-      <div class="card"><div class="k">Account</div><div class="v ${me.customer.status === 'ACTIVE' ? 'ok' : 'warn'}">${esc(me.customer.status)}</div></div>
-      <div class="card"><div class="k">Package</div><div class="v">${esc(sub?.package?.name || 'NONE')}</div></div>
-      <div class="card"><div class="k">Speed</div><div class="v">${snap.downloadKbps ? snap.downloadKbps + 'k' : '—'}</div></div>
-      <div class="card"><div class="k">Expires</div><div class="v">${sub?.expiryTime ? new Date(sub.expiryTime).toLocaleDateString() : '—'}</div></div>
+      <div class="card"><div class="k">Account</div><div class="v sm ${me.customer.status==='ACTIVE'?'ok':'warn'}">${esc(me.customer.status)}</div></div>
+      <div class="card"><div class="k">Package</div><div class="v sm">${esc(sub?.packageName||'None')}</div></div>
+      <div class="card"><div class="k">Speed</div><div class="v sm acc">${snap.downloadKbps?(snap.downloadKbps/1024).toFixed(1)+'M':'—'}</div></div>
+      <div class="card"><div class="k">Expires</div><div class="v sm">${sub?.expiryTime?fmtDate(sub.expiryTime):'—'}</div></div>
     </div>
-    <br/>
-    <div class="card">
-      <div class="k">Quick actions</div><br>
-      <a href="/packages"><button class="ghost">BROWSE PACKAGES →</button></a>
-    </div>`;
+    ${fup?`<br/><div class="card"><div class="k">Data usage this period</div><div class="row" style="margin-top:8px"><div class="mono">${gb(fup.usedBytes)} / ${gb(fup.limitBytes)}</div><div class="spacer"></div>${pill(fup.state)}</div>
+      <div style="height:8px;background:var(--bg);border-radius:5px;margin-top:8px;overflow:hidden"><div style="height:100%;width:${Math.min(100,Number(fup.usedBytes)/Number(fup.limitBytes)*100).toFixed(0)}%;background:linear-gradient(90deg,var(--acc),var(--warn))"></div></div></div>`:''}
+    <br/><div class="card"><div class="k">Quick actions</div><br><a href="/packages"><button class="ghost">BUY / RENEW A PACKAGE →</button></a></div>`;
 };
 
+// ---------- PACKAGES (customer buy) ----------
 views.packages = async () => {
-  if (!store.get('customer_token')) return views.login();
-  const r = await api('/api/v1/packages');
-  let selected = null;
-  $('#view').innerHTML = `
-    <h1>PACKAGES</h1>
-    <div class="sub">// select a package and pay via M-Pesa STK push</div>
-    <div class="grid c4" id="pkgs"></div>
-    <br/>
-    <div class="card" id="paycard" style="display:none">
-      <div class="k">Payment</div><br>
-      <input id="p-phone" placeholder="M-Pesa phone (07… or 2547…)" />
-      <button id="p-go">PAY NOW</button>
-      <p class="sub" id="p-status" style="margin-top:10px"></p>
-    </div>`;
-  const grid = $('#pkgs');
-  for (const p of r.data) {
-    const el = document.createElement('div');
-    el.className = 'pkg';
-    el.innerHTML = `<div class="name">${esc(p.name)}</div><div class="price">${fmtKes(p.priceMinor)}</div>
-      <div class="meta">${p.durationSeconds / 3600}h · ${p.speed ? p.speed.downKbps + 'k↓' : ''}${p.maxDevices} dev</div>`;
-    el.onclick = () => { selected = p; document.querySelectorAll('.pkg').forEach(x => x.classList.remove('sel')); el.classList.add('sel'); $('#paycard').style.display = 'block'; };
-    grid.appendChild(el);
-  }
+  if (!store.get('customer_token')) return location.href='/auth/login';
+  const r = await api('/api/v1/packages'); let selected=null;
+  $('#view').innerHTML = `<h1>Buy Internet</h1><div class="sub">// select a package · pay with M-Pesa</div>
+    <div class="grid c4" id="pkgs"></div><br/>
+    <div class="card" id="paycard" style="display:none"><div class="k">M-Pesa payment</div>
+      <label class="f">Phone</label><input id="p-phone" placeholder="07… or 2547…" />
+      <button class="wide" id="p-go">PAY NOW</button><p class="sub" id="p-status" style="margin-top:10px"></p></div>`;
+  const grid=$('#pkgs');
+  for (const p of r.data) { const el=document.createElement('div'); el.className='pkg';
+    el.innerHTML=`<div class="name">${esc(p.name)}</div><div class="price">${fmtKes(p.priceMinor)}</div><div class="sub" style="margin:6px 0 0">${(p.durationSeconds/3600)}h · ${p.speed?(p.speed.downKbps/1024).toFixed(1)+'M↓':''} · ${p.maxDevices} dev</div>`;
+    el.onclick=()=>{selected=p;document.querySelectorAll('.pkg').forEach(x=>x.classList.remove('sel'));el.classList.add('sel');$('#paycard').style.display='block';}; grid.appendChild(el); }
   $('#p-go').onclick = async () => {
-    if (!selected) return;
-    $('#p-go').disabled = true;
-    $('#p-status').textContent = 'Initiating STK push…';
-    try {
-      const res = await api('/api/v1/payments/initiate', {
-        method: 'POST',
-        body: JSON.stringify({
-          packageId: selected.id,
-          phone: $('#p-phone').value || undefined,
-          idempotencyKey: crypto.randomUUID(),
-          macAddress: 'AA:BB:CC:00:00:' + Math.floor(Math.random() * 255).toString(16).padStart(2, '0').toUpperCase(),
-        }),
-      });
-      $('#p-status').textContent = 'STK push sent — check your phone. Payment ' + res.status + '. Polling…';
-      const pid = res.paymentId;
-      const poll = setInterval(async () => {
-        const st = await api('/api/v1/payments/' + pid);
-        if (st.payment.status === 'SUCCESS') { clearInterval(poll); toast('Payment confirmed — provisioning.'); location.href = '/dashboard'; }
-        if (st.payment.status === 'FAILED') { clearInterval(poll); toast('Payment failed: ' + (st.payment.failureReason || ''), true); $('#p-go').disabled = false; }
-      }, 3000);
-    } catch (e) { toast(e.message, true); $('#p-go').disabled = false; }
-  };
+    if(!selected)return; $('#p-go').disabled=true; $('#p-status').textContent='Sending STK push…';
+    try { const res=await api('/api/v1/payments/initiate',{method:'POST',body:JSON.stringify({packageId:selected.id,phone:$('#p-phone').value||undefined,idempotencyKey:crypto.randomUUID(),macAddress:'AA:BB:CC:00:00:'+Math.floor(Math.random()*255).toString(16).padStart(2,'0').toUpperCase()})});
+      $('#p-status').textContent='STK sent — check your phone. Polling…'; const pid=res.paymentId;
+      const poll=setInterval(async()=>{ const st=await api('/api/v1/payments/'+pid);
+        if(st.payment.status==='SUCCESS'){clearInterval(poll);toast('Payment confirmed — you are online!');location.href='/dashboard';}
+        if(['FAILED','CANCELLED','EXPIRED'].includes(st.payment.status)){clearInterval(poll);toast('Payment '+st.payment.status.toLowerCase(),true);$('#p-go').disabled=false;$('#p-status').textContent='Payment '+st.payment.status;}
+      },3000);
+    } catch(e){ toast(e.message,true); $('#p-go').disabled=false; } };
 };
 
+// ---------- GUEST ----------
 views.guest = () => {
-  $('#view').innerHTML = `
-    <h1>GUEST ACCESS</h1>
-    <div class="sub">// buy wifi instantly — no account needed (§36)</div>
-    <div class="grid c2">
-      <div class="card">
-        <div class="k">Purchase</div><br>
-        <input id="g-phone" placeholder="M-Pesa phone (07…)" />
-        <div id="g-pkgs" class="grid c2" style="gap:8px"></div>
-        <br><button id="g-go" disabled>Select a package</button>
-        <p class="sub" id="g-status" style="margin-top:10px"></p>
-      </div>
-      <div class="card">
-        <div class="k">Check status with access code</div><br>
-        <input id="g-code" placeholder="GST-XXXXXXXX" />
-        <button id="g-check">CHECK</button>
-        <p class="sub" id="g-out" style="margin-top:10px"></p>
-      </div>
-    </div>`;
-  let selected = null;
-  fetch(API + '/api/v1/packages').then(r => r.json()).then(r => {
-    const grid = $('#g-pkgs');
-    for (const p of r.data) {
-      const el = document.createElement('div');
-      el.className = 'pkg';
-      el.innerHTML = `<div class="name">${esc(p.name)}</div><div class="price">${fmtKes(p.priceMinor)}</div>`;
-      el.onclick = () => { selected = p; document.querySelectorAll('.pkg').forEach(x => x.classList.remove('sel')); el.classList.add('sel'); $('#g-go').disabled = false; $('#g-go').textContent = 'PAY ' + fmtKes(p.priceMinor); };
-      grid.appendChild(el);
-    }
-  });
-  $('#g-go').onclick = async () => {
-    $('#g-go').disabled = true;
-    $('#g-status').textContent = 'Sending STK push…';
-    try {
-      const res = await api('/api/v1/guests/purchase', { method: 'POST', body: JSON.stringify({
-        phone: $('#g-phone').value, packageId: selected.id, idempotencyKey: crypto.randomUUID(),
-        macAddress: '02:00:' + Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0').match(/.{2}/g).join(':').toUpperCase(),
-      })});
-      $('#g-status').textContent = 'STK sent. Access code: ' + res.accessCode + ' — polling…';
-      const code = res.accessCode;
-      const poll = setInterval(async () => {
-        const st = await api('/api/v1/guests/' + code);
-        if (st.serviceStatus === 'ONLINE') { clearInterval(poll); toast('Guest service ONLINE.'); $('#g-out').textContent = 'STATUS: ONLINE — ' + st.subscription.packageName; }
-        if (st.lastPaymentStatus === 'FAILED') { clearInterval(poll); toast('Payment failed.', true); $('#g-go').disabled = false; }
-      }, 3000);
-    } catch (e) { toast(e.message, true); $('#g-go').disabled = false; }
-  };
-  $('#g-check').onclick = async () => {
-    try {
-      const st = await api('/api/v1/guests/' + $('#g-code').value.trim());
-      $('#g-out').innerHTML = `STATUS: <span class="pill ${st.serviceStatus === 'ONLINE' ? 'SUCCESS' : 'PENDING'}">${st.serviceStatus}</span>` +
-        (st.subscription ? ` · ${esc(st.subscription.packageName)} · expires ${st.subscription.expiryTime ? new Date(st.subscription.expiryTime).toLocaleString() : '—'}` : '');
-    } catch (e) { toast(e.message, true); }
-  };
+  $('#view').innerHTML = `<h1>Guest WiFi</h1><div class="sub">// buy instantly — no account</div>
+    <div class="grid c2"><div class="card"><div class="k">Purchase</div>
+      <label class="f">Company handle (optional)</label><input id="g-tenant" placeholder="acme-fibre" />
+      <label class="f">Phone</label><input id="g-phone" placeholder="07…" />
+      <div id="g-pkgs" class="grid c2" style="gap:8px;margin-top:8px"></div>
+      <button class="wide" id="g-go" disabled>Select a package</button><p class="sub" id="g-status" style="margin-top:8px"></p></div>
+    <div class="card"><div class="k">Check status by access code</div>
+      <label class="f">Access code</label><input id="g-code" placeholder="GST-XXXXXXXX" /><button class="ghost" id="g-check">CHECK</button>
+      <p class="sub" id="g-out" style="margin-top:10px"></p></div></div>`;
+  let sel=null; const t=()=>$('#g-tenant').value.trim();
+  const load=()=>fetch(API+'/api/v1/packages'+(t()?'?tenant='+encodeURIComponent(t()):'')).then(r=>r.json()).then(r=>{
+    const g=$('#g-pkgs'); g.innerHTML=''; for(const p of r.data){ const el=document.createElement('div'); el.className='pkg';
+      el.innerHTML=`<div class="name">${esc(p.name)}</div><div class="price">${fmtKes(p.priceMinor)}</div>`;
+      el.onclick=()=>{sel=p;document.querySelectorAll('#g-pkgs .pkg').forEach(x=>x.classList.remove('sel'));el.classList.add('sel');$('#g-go').disabled=false;$('#g-go').textContent='PAY '+fmtKes(p.priceMinor);}; g.appendChild(el);} });
+  load(); $('#g-tenant').onchange=load;
+  $('#g-go').onclick=async()=>{ $('#g-go').disabled=true; $('#g-status').textContent='Sending STK…';
+    try{ const res=await api('/api/v1/guests/purchase',{method:'POST',body:JSON.stringify({phone:$('#g-phone').value,packageId:sel.id,tenant:t()||undefined,idempotencyKey:crypto.randomUUID(),macAddress:'02:00:'+Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0').match(/.{2}/g).join(':').toUpperCase()})});
+      $('#g-status').textContent='STK sent. Access code: '+res.accessCode+' — polling…'; const code=res.accessCode;
+      const poll=setInterval(async()=>{ const st=await api('/api/v1/guests/'+code);
+        if(st.serviceStatus==='ONLINE'){clearInterval(poll);toast('You are online!');$('#g-out').innerHTML='STATUS: '+pill('ONLINE')+' '+esc(st.subscription.packageName);}
+        if(['FAILED','CANCELLED','EXPIRED'].includes(st.lastPaymentStatus)){clearInterval(poll);toast('Payment '+st.lastPaymentStatus.toLowerCase(),true);$('#g-go').disabled=false;}
+      },3000);
+    }catch(e){toast(e.message,true);$('#g-go').disabled=false;} };
+  $('#g-check').onclick=async()=>{ try{ const st=await api('/api/v1/guests/'+$('#g-code').value.trim());
+    $('#g-out').innerHTML='STATUS: '+pill(st.serviceStatus)+(st.subscription?' · '+esc(st.subscription.packageName)+' · expires '+fmtWhen(st.subscription.expiryTime):''); }catch(e){toast(e.message,true);} };
 };
 
-views.admin = async (tab) => {
-  if (!store.get('user_token')) { toast('Operator login required', true); return views.login(); }
-  tab = tab || (views.admin._tab || 'overview');
-  views.admin._tab = tab;
-  const tabs = ['overview', 'customers', 'packages', 'users', 'ops', 'settings', 'triggers'];
-  $('#view').innerHTML = `
-    <h1>ADMIN COMMAND CENTER</h1>
-    <div class="sub">// business state · desired state · actual state · audit</div>
-    <div class="tabs" id="adm-tabs">${tabs.map(t => `<button class="${t === tab ? 'active' : ''}" data-tab="${t}">${t.toUpperCase()}</button>`).join('')}</div>
-    <div id="adm-body"><div class="card mono">LOADING…</div></div>`;
-  document.querySelectorAll('#adm-tabs button').forEach(b => b.onclick = () => views.admin(b.dataset.tab));
-  const body = $('#adm-body');
-
-  if (tab === 'overview') {
-    const [sum, pays, ops] = await Promise.all([
-      api('/api/v1/admin/summary').catch(() => null),
-      api('/api/v1/admin/payments?limit=12').catch(() => null),
-      api('/api/v1/admin/network-operations?limit=12').catch(() => null),
-    ]);
-    const s = sum?.summary || {};
-    body.innerHTML = `
-    <div class="grid c4">
-      <div class="card"><div class="k">Customers</div><div class="v">${s.customers ?? '—'}</div></div>
-      <div class="card"><div class="k">Active subs</div><div class="v ok">${s.activeSubscriptions ?? '—'}</div></div>
-      <div class="card"><div class="k">Revenue</div><div class="v">${s.revenueMinor != null ? fmtKes(s.revenueMinor) : '—'}</div></div>
-      <div class="card"><div class="k">Payments pending / closed-unpaid</div><div class="v ${s.pendingPayments ? 'warn' : 'ok'}">${s.pendingPayments ?? 0} / ${s.unresolvedPayments ?? 0}</div></div>
-      <div class="card"><div class="k">Net ops queued / failed</div><div class="v ${s.failedNetworkOperations ? 'crit' : 'ok'}">${s.queuedNetworkOperations ?? 0} / ${s.failedNetworkOperations ?? 0}</div></div>
-    </div>
-    <br/>
-    <div class="grid c2">
-      <div class="card"><div class="k">Recent payments</div><br>
-        <table><tr><th>Status</th><th>Amount</th><th>Package</th><th>Receipt</th><th>When</th></tr>
-        ${(pays?.data || []).map(p => `<tr><td>${pill(p.status)}</td><td>${fmtKes(p.amountMinor)}</td><td>${esc(p.package?.name || '—')}</td><td class="mono">${esc(p.receipt || '—')}</td><td>${fmtWhen(p.createdAt)}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">no payments yet</td></tr>'}
-        </table></div>
-      <div class="card"><div class="k">Network operations</div><br>
-        <table><tr><th>Type</th><th>Status</th><th>Attempts</th><th>Router</th><th>Action</th></tr>
-        ${(ops?.data || []).map(o => `<tr><td>${esc(o.type)}</td><td>${pill(o.status)}</td><td>${esc(o.attempts)}</td><td>${esc(o.router)}</td><td>${o.status === 'PERMANENT_FAILURE' ? '<button class="ghost" data-retry="' + o.id + '">RETRY</button>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">queue empty</td></tr>'}
-        </table></div>
-    </div>`;
-    body.querySelectorAll('[data-retry]').forEach(b => {
-      b.onclick = async () => {
-        try { await api('/api/v1/admin/network-operations/' + b.dataset.retry + '/retry', { method: 'POST' }); toast('Re-queued.'); views.admin(); } catch (e) { toast(e.message, true); }
-      };
-    });
-  }
-
-  if (tab === 'customers') {
-    const cs = await api('/api/v1/admin/customers?limit=50');
-    body.innerHTML = `<div class="card"><div class="k">Customers — click for 3-pane detail (Business / Desired / Actual)</div><br>
-      <table><tr><th>Number</th><th>Type</th><th>Status</th><th>Phone</th><th>Package</th><th>Expiry</th><th></th></tr>
-      ${cs.data.map(c => `<tr><td class="mono">${esc(c.customerNumber)}</td><td>${esc(c.accountType)}</td><td>${pill(c.status)}</td><td>${esc(c.phone || '—')}</td><td>${esc(c.activeSubscription?.packageName || '—')}</td><td>${c.activeSubscription?.expiryTime ? new Date(c.activeSubscription.expiryTime).toLocaleString() : '—'}</td><td><button class="ghost" data-cust="${c.id}">INSPECT</button></td></tr>`).join('') || '<tr><td colspan="7" class="sub">none</td></tr>'}
-      </table></div><div id="cust-detail"></div>`;
-    body.querySelectorAll('[data-cust]').forEach(b => b.onclick = async () => {
-      const d = await api('/api/v1/admin/customers/' + b.dataset.cust);
-      const dv = d.desiredNetworkState, ac = d.actualNetworkState;
-      $('#cust-detail').innerHTML = `<br><div class="grid c3">
-        <div class="card"><div class="k">BUSINESS STATE</div><br>
-          <table>
-            <tr><td>Sub</td><td>${pill(d.business.subscription?.status || 'NONE')}</td></tr>
-            <tr><td>Package</td><td>${esc(d.business.subscription?.packageName || '—')}</td></tr>
-            <tr><td>FUP</td><td>${d.business.subscription?.fup ? pill(d.business.subscription.fup.state) + ' ' + (Number(d.business.subscription.fup.usedBytes)/1e9).toFixed(1) + '/' + (Number(d.business.subscription.fup.limitBytes)/1e9).toFixed(1) + 'GB' : '—'}</td></tr>
-            <tr><td>Payments</td><td>${d.business.payments.length}</td></tr>
-          </table></div>
-        <div class="card"><div class="k">DESIRED NETWORK STATE</div><br>
-          <table>
-            <tr><td>Version</td><td>v${dv?.version ?? '—'}</td></tr>
-            <tr><td>Authorized</td><td>${dv?.state?.authorized ?? '—'}</td></tr>
-            <tr><td>Rate</td><td>${dv?.state?.rateLimit ? dv.state.rateLimit.downloadKbps + 'k/' + dv.state.rateLimit.uploadKbps + 'k' : '—'}</td></tr>
-            <tr><td>Synced</td><td>${dv?.synchronizedAt ? new Date(dv.synchronizedAt).toLocaleString() : 'never'}</td></tr>
-          </table></div>
-        <div class="card"><div class="k">ACTUAL NETWORK STATE</div><br>
-          <table>
-            <tr><td>Last op</td><td>${ac ? esc(ac.lastOperation.type) + ' ' + pill(ac.lastOperation.status) : '—'}</td></tr>
-            <tr><td>Verified</td><td>${ac?.lastOperation?.verifiedAt ? new Date(ac.lastOperation.verifiedAt).toLocaleString() : '—'}</td></tr>
-            <tr><td>Drift</td><td>${pill(d.driftVerdict === 'SYNCHRONIZED' ? 'SUCCESS' : d.driftVerdict === 'DRIFTED' ? 'FAILED' : 'PENDING')}</td></tr>
-            <tr><td>Devices</td><td>${d.devices.length}</td></tr>
-          </table></div>
-      </div>`;
-    });
-  }
-
-  if (tab === 'packages') {
-    const pkgs = await api('/api/v1/admin/packages');
-    body.innerHTML = `<div class="grid c2">
-      <div class="card"><div class="k">Packages</div><br>
-        <table><tr><th>Name</th><th>v</th><th>Status</th><th>Price</th><th>Speed</th><th></th></tr>
-        ${pkgs.data.map(p => `<tr><td>${esc(p.name)}</td><td>v${p.version}</td><td>${pill(p.status)}</td><td>${fmtKes(p.priceMinor)}</td><td>${p.policy ? p.policy.downloadKbps + '/' + p.policy.uploadKbps + 'k' : '—'}</td><td>${p.status === 'ACTIVE' ? '<button class="ghost" data-retire="' + p.id + '">RETIRE</button>' : ''}</td></tr>`).join('')}
-        </table></div>
-      <div class="card"><div class="k">Create package (edits create new versions — history immutable)</div><br>
-        <input id="np-name" placeholder="name (e.g. Month Pass)" />
-        <input id="np-price" placeholder="price KES (minor units, e.g. 50000)" />
-        <input id="np-duration" placeholder="duration seconds (e.g. 2592000)" />
-        <input id="np-down" placeholder="download kbps (e.g. 10240)" />
-        <input id="np-up" placeholder="upload kbps (e.g. 5120)" />
-        <input id="np-fup" placeholder="FUP limit bytes (optional, e.g. 53687091200)" />
-        <button id="np-go">CREATE</button></div></div>`;
-    body.querySelector('#np-go').onclick = async () => {
-      try {
-        await api('/api/v1/admin/packages', { method: 'POST', body: JSON.stringify({
-          name: $('#np-name').value, priceMinor: Number($('#np-price').value), durationSeconds: Number($('#np-duration').value),
-          policy: { downloadKbps: Number($('#np-down').value), uploadKbps: Number($('#np-up').value), ...( $('#np-fup').value ? { fupLimitBytes: $('#np-fup').value } : {}) },
-        })});
-        toast('Package created.'); views.admin('packages');
-      } catch (e) { toast(e.message, true); }
-    };
-    body.querySelectorAll('[data-retire]').forEach(b => b.onclick = async () => {
-      try { await api('/api/v1/admin/packages/' + b.dataset.retire, { method: 'DELETE' }); toast('Retired.'); views.admin('packages'); } catch (e) { toast(e.message, true); }
-    });
-  }
-
-  if (tab === 'users') {
-    const [users, roles] = await Promise.all([api('/api/v1/admin/users'), api('/api/v1/admin/roles')]);
-    const roleNames = roles.data.map(r => r.name);
-    body.innerHTML = `<div class="grid c2">
-      <div class="card"><div class="k">Staff users</div><br>
-        <table><tr><th>Email</th><th>Role</th><th>Status</th><th>Last login</th></tr>
-        ${users.data.map(u => `<tr><td>${esc(u.email)}</td><td><select data-user="${u.id}">${roleNames.map(r => `<option ${r === u.role ? 'selected' : ''}>${r}</option>`).join('')}</select></td><td>${pill(u.status)}</td><td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : '—'}</td></tr>`).join('')}
-        </table></div>
-      <div class="card"><div class="k">Create staff user</div><br>
-        <input id="nu-email" placeholder="email" />
-        <input id="nu-pass" type="password" placeholder="password (min 10 chars)" />
-        <input id="nu-name" placeholder="display name" />
-        <select id="nu-role">${roleNames.map(r => `<option>${r}</option>`).join('')}</select>
-        <button id="nu-go">CREATE</button>
-        <p class="sub" style="margin-top:8px">Role changes revoke live sessions — new permissions apply at next login. All audited.</p></div></div>`;
-    body.querySelectorAll('select[data-user]').forEach(sel => sel.onchange = async () => {
-      try { await api('/api/v1/admin/users/' + sel.dataset.user, { method: 'PATCH', body: JSON.stringify({ role: sel.value }) }); toast('Role assigned + sessions revoked.'); } catch (e) { toast(e.message, true); }
-    });
-    body.querySelector('#nu-go').onclick = async () => {
-      try { await api('/api/v1/admin/users', { method: 'POST', body: JSON.stringify({ email: $('#nu-email').value, password: $('#nu-pass').value, displayName: $('#nu-name').value, role: $('#nu-role').value }) }); toast('User created.'); views.admin('users'); } catch (e) { toast(e.message, true); }
-    };
-  }
-
-  if (tab === 'ops') {
-    const [sessions, ops] = await Promise.all([
-      api('/api/v1/admin/sessions').catch(() => null),
-      api('/api/v1/admin/network-operations?limit=25').catch(() => null),
-    ]);
-    body.innerHTML = `<div class="grid c2">
-      <div class="card"><div class="k">Live sessions</div><br>
-        <table><tr><th>Customer</th><th>MAC</th><th>Status</th><th>↓/↑</th><th></th></tr>
-        ${(sessions?.data || []).map(s => `<tr><td>${esc(s.customer)}</td><td class="mono">${esc(s.macAddress)}</td><td>${pill(s.status)}</td><td>${s.downloadBytes}/${s.uploadBytes}</td><td><button class="ghost" data-disc="${s.id}">DISCONNECT</button></td></tr>`).join('') || '<tr><td colspan="5" class="sub">no active sessions</td></tr>'}
-        </table></div>
-      <div class="card"><div class="k">Network operations</div><br>
-        <table><tr><th>Type</th><th>Status</th><th>Att.</th><th>Router</th><th></th></tr>
-        ${(ops?.data || []).map(o => `<tr><td>${esc(o.type)}</td><td>${pill(o.status)}</td><td>${esc(o.attempts)}</td><td>${esc(o.router)}</td><td>${o.status === 'PERMANENT_FAILURE' ? '<button class="ghost" data-retry="' + o.id + '">RETRY</button>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="sub">queue empty</td></tr>'}
-        </table></div></div>`;
-    body.querySelectorAll('[data-disc]').forEach(b => b.onclick = async () => {
-      try { await api('/api/v1/admin/sessions/' + b.dataset.disc + '/disconnect', { method: 'POST' }); toast('Disconnect queued.'); views.admin('ops'); } catch (e) { toast(e.message, true); }
-    });
-    body.querySelectorAll('[data-retry]').forEach(b => b.onclick = async () => {
-      try { await api('/api/v1/admin/network-operations/' + b.dataset.retry + '/retry', { method: 'POST' }); toast('Re-queued.'); views.admin('ops'); } catch (e) { toast(e.message, true); }
-    });
-  }
-
-  if (tab === 'settings') {
-    const t = await api('/api/v1/admin/tenant').catch(() => null);
-    const ten = t?.tenant || {};
-    const pay = t?.payment || {};
-    body.innerHTML = `<div class="grid c2">
-      <div class="card"><div class="k">Company</div><br>
-        <table>
-          <tr><td>Name</td><td class="mono">${esc(ten.name || '—')}</td></tr>
-          <tr><td>Handle</td><td class="mono">${esc(ten.slug || '—')}</td></tr>
-          <tr><td>Status</td><td>${pill(ten.status || 'UNKNOWN')}</td></tr>
-          <tr><td>Country</td><td>${esc(ten.country || '—')}</td></tr>
-        </table>
-        <br><div class="k">Branding / contact</div><br>
-        <input id="t-support-phone" placeholder="support phone" value="${esc(ten.supportPhone || '')}" />
-        <input id="t-support-email" placeholder="support email" value="${esc(ten.supportEmail || '')}" />
-        <input id="t-color" placeholder="brand colour #38e1c4" value="${esc(ten.primaryColor || '')}" />
-        <button class="ghost" id="t-save">SAVE COMPANY PROFILE</button>
-      </div>
-      <div class="card"><div class="k">M-Pesa collection (paybill / till)</div><br>
-        <table>
-          <tr><td>Channel</td><td>${pill(pay.channel || 'PAYBILL')}</td></tr>
-          <tr><td>Credentials</td><td>${pay.credentialsConfigured ? pill('SUCCESS') : pill('PENDING')}</td></tr>
-          <tr><td>Encryption</td><td>${pay.encryptionAvailable ? pill('SUCCESS') : pill('FAILED') + ' set CREDENTIALS_ENCRYPTION_KEY'}</td></tr>
-        </table><br>
-        <select id="pm-channel">
-          <option value="PAYBILL" ${pay.channel === 'PAYBILL' ? 'selected' : ''}>PAYBILL (CustomerPayBillOnline)</option>
-          <option value="TILL" ${pay.channel === 'TILL' ? 'selected' : ''}>TILL / Buy Goods (CustomerBuyGoodsOnline)</option>
-        </select>
-        <select id="pm-env">
-          <option value="sandbox" ${pay.environment !== 'production' ? 'selected' : ''}>sandbox</option>
-          <option value="production" ${pay.environment === 'production' ? 'selected' : ''}>production</option>
-        </select>
-        <input id="pm-shortcode" placeholder="shortcode / store number" value="${esc(pay.shortcode || '')}" />
-        <input id="pm-partyb" placeholder="till number (Buy Goods only)" value="${esc(pay.partyB || '')}" />
-        <input id="pm-ck" type="password" placeholder="consumer key (leave blank to keep)" />
-        <input id="pm-cs" type="password" placeholder="consumer secret (leave blank to keep)" />
-        <input id="pm-pk" type="password" placeholder="passkey (leave blank to keep)" />
-        <button id="pm-save">SAVE M-PESA CONFIG</button>
-        <p class="sub" style="margin-top:8px">Credentials are encrypted at rest; this screen never shows them back.</p>
-      </div></div>`;
-    body.querySelector('#t-save').onclick = async () => {
-      try {
-        await api('/api/v1/admin/tenant', { method: 'PATCH', body: JSON.stringify({
-          supportPhone: $('#t-support-phone').value || undefined,
-          supportEmail: $('#t-support-email').value || undefined,
-          primaryColor: $('#t-color').value || undefined,
-        })});
-        toast('Company profile saved.');
-      } catch (e) { toast(e.message, true); }
-    };
-    body.querySelector('#pm-save').onclick = async () => {
-      try {
-        const payload = { channel: $('#pm-channel').value, env: $('#pm-env').value, shortcode: $('#pm-shortcode').value };
-        if ($('#pm-partyb').value) payload.partyB = $('#pm-partyb').value;
-        if ($('#pm-ck').value) payload.consumerKey = $('#pm-ck').value;
-        if ($('#pm-cs').value) payload.consumerSecret = $('#pm-cs').value;
-        if ($('#pm-pk').value) payload.passkey = $('#pm-pk').value;
-        await api('/api/v1/admin/tenant/payment-config', { method: 'PUT', body: JSON.stringify(payload) });
-        toast('M-Pesa configuration saved.'); views.admin('settings');
-      } catch (e) { toast(e.message, true); }
-    };
-  }
-
-  if (tab === 'triggers') {
-    const pc = await api('/api/v1/admin/payment-config').catch(() => null);
-    body.innerHTML = `<div class="grid c2">
-      <div class="card"><div class="k">Payment configuration (§4.1)</div><br>
-        <table>
-          <tr><td>Provider</td><td class="mono">${esc(pc?.provider || '—')}</td></tr>
-          <tr><td>Daraja configured</td><td>${pc?.daraja?.configured ? pill('SUCCESS') : pill('PENDING')} ${pc?.daraja?.configured ? '' : '(mock mode until MPESA_* secrets are set)'}</td></tr>
-          <tr><td>Daraja env</td><td>${esc(pc?.daraja?.environment || '—')}</td></tr>
-          <tr><td>Callback URL</td><td class="mono">${esc(pc?.daraja?.callbackUrl || 'not set')}</td></tr>
-        </table>
-        <p class="sub" style="margin-top:8px">${esc(pc?.note || '')}</p>
-        <button class="ghost" id="trig-pay">RUN PAYMENT RECONCILIATION</button></div>
-      <div class="card"><div class="k">Network reconciliation (§4.4)</div><br>
-        <p class="sub">Detects desired-vs-actual drift across subscribers and queues repair operations with read-back verification.</p>
-        <button class="ghost" id="trig-net">RUN NETWORK RECONCILIATION</button>
-        <br><br><div class="k">Router health</div>
-        <p class="sub">Health polling runs on the scheduler (every minute).</p></div></div>`;
-    body.querySelector('#trig-pay').onclick = async () => {
-      try { await api('/api/v1/admin/payment-config/reconcile', { method: 'POST' }); toast('Payment reconciliation queued.'); } catch (e) { toast(e.message, true); }
-    };
-    body.querySelector('#trig-net').onclick = async () => {
-      try { await api('/api/v1/admin/network/reconcile', { method: 'POST' }); toast('Network reconciliation queued.'); } catch (e) { toast(e.message, true); }
-    };
-  }
-};
-
-views.owner = async () => {
-  if (!store.get('user_token')) { toast('Owner login required', true); return views.login(); }
-  let sum, tenants, health;
-  try {
-    [sum, tenants, health] = await Promise.all([
-      api('/api/v1/platform/summary'),
-      api('/api/v1/platform/tenants'),
-      api('/api/v1/platform/health'),
-    ]);
-  } catch (e) {
-    toast('Platform owner access required.', true);
-    return views.admin();
-  }
-  const s = sum.summary || {};
-  const h = health.health || {};
-  $('#view').innerHTML = `
-    <h1>PLATFORM OWNER CONSOLE</h1>
-    <div class="sub">// cross-tenant estate — every company on NEXORA</div>
-    <div class="grid c4">
-      <div class="card"><div class="k">Companies (active)</div><div class="v ok">${s.tenants ?? 0} <span class="sub">(${s.activeTenants ?? 0})</span></div></div>
-      <div class="card"><div class="k">Customers</div><div class="v">${s.customers ?? 0}</div></div>
-      <div class="card"><div class="k">Active subscriptions</div><div class="v ok">${s.activeSubscriptions ?? 0}</div></div>
-      <div class="card"><div class="k">Total revenue</div><div class="v">${fmtKes(s.revenueMinor)}</div></div>
-      <div class="card"><div class="k">Staff users</div><div class="v">${s.staff ?? 0}</div></div>
-      <div class="card"><div class="k">Routers online / total</div><div class="v ${s.routersOnline < s.routersTotal ? 'warn' : 'ok'}">${s.routersOnline ?? 0} / ${s.routersTotal ?? 0}</div></div>
-      <div class="card"><div class="k">Payments pending / expired / cancelled</div><div class="v">${s.pendingPayments ?? 0} / ${s.expiredPayments ?? 0} / ${s.cancelledPayments ?? 0}</div></div>
-      <div class="card"><div class="k">Failed net ops</div><div class="v ${s.failedNetworkOperations ? 'crit' : 'ok'}">${s.failedNetworkOperations ?? 0}</div></div>
-    </div>
-    <br/>
-    <div class="grid c2">
-      <div class="card"><div class="k">Companies</div><br>
-        <table><tr><th>Company</th><th>Status</th><th>M-Pesa</th><th>Customers</th><th>Active</th><th>Revenue</th><th>Action</th></tr>
-        ${(tenants.data || []).map(t => `<tr>
-          <td class="mono">${esc(t.name)}<br><span class="sub">${esc(t.slug)}</span></td>
-          <td>${pill(t.status)}</td>
-          <td>${t.mpesaConfigured ? pill('SUCCESS') + ' ' + esc(t.mpesaChannel) : pill('PENDING')}</td>
-          <td>${t.customers}</td><td>${t.activeSubscriptions}</td><td>${fmtKes(t.revenueMinor)}</td>
-          <td>${t.slug === 'default' || t.slug === 'platform' ? '<span class="sub">reserved</span>' : (t.status === 'SUSPENDED' ? '<button class="ghost" data-act="ACTIVE" data-id="' + t.id + '">ACTIVATE</button>' : '<button class="ghost" data-act="SUSPENDED" data-id="' + t.id + '">SUSPEND</button>')}</td>
-        </tr>`).join('') || '<tr><td colspan="7" class="sub">no companies yet</td></tr>'}
-        </table></div>
-      <div class="card"><div class="k">System health</div><br>
-        <table>
-          <tr><td>Outbox pending / dead</td><td>${h.outboxPending ?? 0} / <span class="${h.outboxDead ? 'crit' : ''}">${h.outboxDead ?? 0}</span></td></tr>
-          <tr><td>Jobs queued / failed</td><td>${h.jobsQueued ?? 0} / <span class="${h.jobsFailed ? 'crit' : ''}">${h.jobsFailed ?? 0}</span></td></tr>
-          <tr><td>Routers offline</td><td>${h.routersOffline ?? 0}</td></tr>
-          <tr><td>Live sessions</td><td>${h.liveSessions ?? 0}</td></tr>
-        </table>
-        <p class="sub" style="margin-top:10px">Suspending a company blocks new transactions immediately; data is retained.</p>
-      </div>
-    </div>`;
-  document.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
-    try { await api('/api/v1/platform/tenants/' + b.dataset.id, { method: 'PATCH', body: JSON.stringify({ status: b.dataset.act }) }); toast('Company ' + b.dataset.act + '.'); views.owner(); } catch (e) { toast(e.message, true); }
-  });
-};
-
-views.guide = () => {
-  $('#view').innerHTML = `
-    <h1>SETUP GUIDE</h1>
-    <div class="sub">// get a company online — signup · M-Pesa · router · sell</div>
-    <div class="grid c2">
-      <div class="card"><div class="k">1 · Create your company</div><br>
-        <p class="sub">From the login page choose <b>Create a company</b>. You become SUPER_ADMIN with a starter catalogue you can edit under Admin → Packages.</p>
-      </div>
-      <div class="card"><div class="k">2 · Configure M-Pesa</div><br>
-        <p class="sub">Admin → Settings → M-Pesa. Pick <b>Pay Bill</b> or <b>Till (Buy Goods)</b>, enter your shortcode/till and Daraja Consumer Key/Secret + Passkey. Credentials are encrypted at rest. Get them from developer.safaricom.co.ke.</p>
-      </div>
-    </div>
-    <br/>
-    <div class="card"><div class="k">3 · Prepare a MikroTik (RouterOS) router</div><br>
-      <p class="sub">Create a least-privilege API user and enable the API service (run in Winbox → New Terminal):</p>
-      <pre class="mono" style="background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:12px;overflow:auto;white-space:pre-wrap;color:var(--acc)">/user group add name=nexora-api policy=api,read,write,test,!local,!telnet,!ssh,!ftp,!reboot,!policy,!winbox,!password,!web,!sniff,!sensitive,!romon
-/user add name=nexora group=nexora-api password=STRONG_SECRET comment="NEXORA automation"
-
-# Preferred: API over TLS
-/ip service set api-ssl disabled=no port=8729
-/ip service disable telnet,ftp,www
-
-# Captive portal: send unauthenticated users to your NEXORA portal
-/ip hotspot walled-garden add dst-host=YOUR_NEXORA_HOST action=allow</pre>
-      <p class="sub" style="margin-top:8px">Store the password in the server variable (e.g. <span class="mono">ROUTER_01_PASSWORD</span>) — never in the database. Prefer an outbound WireGuard/IPsec tunnel over exposing the API port. Full guide: <span class="mono">docs/ROUTER_SETUP.md</span>.</p>
-    </div>
-    <br/>
-    <div class="card"><div class="k">4 · Register the router &amp; go live</div><br>
-      <p class="sub">Add the router (vendor MIKROTIK or TENDA, host, port 8729, user <span class="mono">nexora</span>, password variable name). NEXORA health-checks it every minute and verifies each AUTHORIZE with a read-back. Then run a test purchase from the Packages page.</p>
-      <p class="sub">Tenda devices: set a strong admin password, restrict remote management to your NEXORA network, register with vendor TENDA. Capability varies by model.</p>
-    </div>
-    <br/>
-    <div class="card"><div class="k">Payment lifecycle — nothing left hanging</div><br>
-      <p class="sub">Every payment ends as <span class="pill SUCCESS">SUCCESS</span> <span class="pill FAILED">CANCELLED</span> <span class="pill FAILED">EXPIRED</span> or <span class="pill FAILED">FAILED</span>. A reconciliation sweep runs every 2 minutes to close out anything the callback missed (cancel 1032 → CANCELLED, timeouts → EXPIRED). Customers are notified of each outcome.</p>
-    </div>`;
-};
-
-// ---------- Router ----------
-const path = location.pathname;
-if (path.startsWith('/auth')) views.login();
-else if (path === '/dashboard') views.dashboard();
-else if (path === '/packages') views.packages();
-else if (path === '/guest') views.guest();
-else if (path === '/admin') views.admin();
-else if (path === '/owner') views.owner();
-else if (path === '/guide') views.guide();
-else {
-  // Landing: route by session
-  if (store.get('customer_token')) location.href = '/dashboard';
-  else if (store.get('user_token')) location.href = store.get('user')?.role === 'PLATFORM_OWNER' ? '/owner' : '/admin';
-  else views.login();
+// ---------- helper: paginated table fetch ----------
+async function tget(path){ try { return await api(path); } catch { return null; } }
+</script>
+<script src="/portal-admin.js"></script>
+<script src="/portal-owner.js"></script>
+<script>
+// ---------- ROUTER ----------
+async function boot() {
+  await loadMe();
+  const path = location.pathname;
+  renderChrome(path);
+  if (path.startsWith('/auth')) return views.login();
+  if (path === '/dashboard') return views.dashboard();
+  if (path === '/packages') return views.packages();
+  if (path === '/guest') return views.guest();
+  if (path === '/admin') return views.admin();
+  if (path === '/owner') return views.owner();
+  if (path === '/guide') return views.guide();
+  // landing
+  if (store.get('customer_token')) return location.href='/dashboard';
+  if (store.get('user_token')) return location.href = isOwner() ? '/owner' : '/admin';
+  return views.login();
 }
-document.querySelectorAll('#nav a').forEach(a => {
-  if (a.dataset.p === path.split('/')[1]) a.classList.add('active');
-});
+boot();
 </script>
 </body>
 </html>

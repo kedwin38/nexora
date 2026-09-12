@@ -37,17 +37,17 @@ import { registerPlatformRoutes } from './routes/platform.routes.js';
 import { prismaSessionStore } from './session-store.js';
 import type { NexoraContext } from './context.js';
 
-async function loadPortalHtml(): Promise<string | null> {
+async function loadPublicAsset(name: string): Promise<Buffer | null> {
   // Works under tsx dev (cwd = apps/api), node dist (cwd = apps/api), and
   // repo-root invocations. import.meta.url is unavailable in CJS bundles,
   // so cwd-based resolution is the portable choice.
   const candidates = [
-    join(process.cwd(), 'public', 'index.html'),
-    join(process.cwd(), 'apps', 'api', 'public', 'index.html'),
+    join(process.cwd(), 'public', name),
+    join(process.cwd(), 'apps', 'api', 'public', name),
   ];
   for (const candidate of candidates) {
     try {
-      return await readFile(candidate, 'utf8');
+      return await readFile(candidate);
     } catch {
       // try next
     }
@@ -187,18 +187,32 @@ async function main(): Promise<void> {
   await registerPlatformRoutes(app, nexora);
 
   // ---- Interim operator portal (Stage 7 replaces this with apps/web) ----
-  const portalHtml = await loadPortalHtml();
+  const portalHtml = await loadPublicAsset('index.html');
   if (portalHtml !== null) {
-    const portalPaths = new Set(['/', '/auth/login', '/auth/customer', '/dashboard', '/packages', '/guest', '/admin', '/admin/ops', '/owner', '/guide', '/icon.svg']);
+    // SPA routes (all resolve to index.html) vs. static assets (served with
+    // their own content type). The portal is a single HTML file plus a couple
+    // of role-scoped script bundles and an icon, all under /public.
+    const portalPaths = new Set(['/', '/auth/login', '/auth/customer', '/dashboard', '/packages', '/guest', '/admin', '/admin/ops', '/owner', '/guide']);
+    const assets: Record<string, { file: string; type: string }> = {
+      '/icon.svg': { file: 'icon.svg', type: 'image/svg+xml' },
+      '/portal-admin.js': { file: 'portal-admin.js', type: 'application/javascript; charset=utf-8' },
+      '/portal-owner.js': { file: 'portal-owner.js', type: 'application/javascript; charset=utf-8' },
+    };
+    // Preload script bundles once at boot; they are static and small.
+    const assetCache = new Map<string, Buffer>();
+    for (const [urlPath, { file }] of Object.entries(assets)) {
+      const buf = await loadPublicAsset(file);
+      if (buf !== null) assetCache.set(urlPath, buf);
+    }
     app.get('*', async (request, reply) => {
       const urlPath = request.url.split('?')[0] ?? '';
-      if (urlPath === '/icon.svg') {
-        try {
-          const icon = await readFile(join(process.cwd(), 'apps', 'api', 'public', 'icon.svg'));
-          return await reply.type('image/svg+xml').send(icon);
-        } catch {
-          return await reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Not found.', correlationId: request.id, retryable: false } });
+      const asset = assets[urlPath];
+      if (asset !== undefined) {
+        const buf = assetCache.get(urlPath) ?? (await loadPublicAsset(asset.file));
+        if (buf !== null) {
+          return await reply.type(asset.type).send(buf);
         }
+        return await reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Not found.', correlationId: request.id, retryable: false } });
       }
       if (portalPaths.has(urlPath)) {
         return await reply.type('text/html').send(portalHtml);

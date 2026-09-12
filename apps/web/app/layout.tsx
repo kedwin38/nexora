@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
+import { SiteHeader } from './site-header';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -11,18 +11,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <header>
-          <div className="brand">
-            NEXORA <small>// ISP OS</small>
-          </div>
-          <nav>
-            <Link href="/dashboard">Dashboard</Link>
-            <Link href="/packages">Packages</Link>
-            <Link href="/admin">Admin</Link>
-          </nav>
-        </header>
+        <SiteHeader />
         {children}
-        <footer>NEXORA ISP OS // CONTROL PLANE // PHASE 1</footer>
+        <footer>NEXORA ISP OS // multi-tenant control plane</footer>
       </body>
     </html>
   );

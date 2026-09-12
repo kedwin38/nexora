@@ -48,3 +48,46 @@ button.ghost { background: transparent; color: var(--acc); border: 1px solid var
 .toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--acc); padding: 12px 16px; border-radius: 6px; font-family: var(--mono); font-size: 12px; max-width: 380px; z-index: 99; }
 .toast.err { border-color: var(--crit); }
 footer { text-align: center; color: var(--dim); font-family: var(--mono); font-size: 10px; padding: 40px 0; letter-spacing: 2px; }
+
+/* ---- commercial UI additions (owner console, admin billing/settings) ---- */
+header .brand { cursor: pointer; }
+nav { display: flex; align-items: center; gap: 0; }
+nav .who { margin-left: 18px; color: var(--txt); font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+nav button.logout { width: auto; margin-left: 14px; background: transparent; color: var(--crit); border: 1px solid var(--line); padding: 5px 12px; font-size: 11px; letter-spacing: 1px; }
+nav button.logout:hover { border-color: var(--crit); filter: none; }
+textarea { width: 100%; background: var(--bg); color: var(--txt); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; font-family: var(--mono); font-size: 13px; resize: vertical; }
+textarea:focus { outline: none; border-color: var(--acc); }
+select { width: 100%; background: var(--bg); color: var(--txt); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; font-family: var(--mono); font-size: 13px; }
+label.f { display: block; color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-family: var(--mono); margin-bottom: 4px; }
+.v.acc, .acc { color: var(--acc); }
+.v.sm { font-size: 16px; }
+.stat-sub { color: var(--dim); font-size: 10px; font-family: var(--mono); margin-top: 6px; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.row .spacer { flex: 1; }
+.card.muted, .muted-card { background: var(--panel2); border-style: dashed; }
+pre.code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px; overflow: auto; white-space: pre-wrap; color: var(--acc); font-family: var(--mono); font-size: 11px; line-height: 1.5; }
+
+/* subscription plan cards */
+.plan { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; }
+.plan .plan-head { display: flex; justify-content: space-between; align-items: center; }
+.plan .name { font-size: 15px; letter-spacing: 1px; }
+.plan .price { font-family: var(--mono); font-size: 24px; color: var(--acc); margin-top: 8px; }
+.plan .price small { color: var(--dim); font-size: 12px; }
+.plan ul.feat { list-style: none; margin: 10px 0 0; padding: 0; }
+.plan ul.feat li { color: var(--txt); font-size: 12px; padding: 3px 0 3px 14px; position: relative; }
+.plan ul.feat li::before { content: '›'; position: absolute; left: 0; color: var(--acc); }
+
+/* AI-monitor severity dots */
+.sev-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.sev-INFO { background: var(--acc); }
+.sev-WARNING { background: var(--warn); }
+.sev-CRITICAL { background: var(--crit); }
+.pill.TRIALING, .pill.PAST_DUE { background: rgba(245,196,81,.1); color: var(--warn); border: 1px solid rgba(245,196,81,.4); }
+.pill.SUSPENDED, .pill.CANCELLED, .pill.OVERDUE { background: rgba(242,109,109,.1); color: var(--crit); border: 1px solid rgba(242,109,109,.4); }
+.pill.PAID, .pill.TRIAL { background: rgba(56,225,196,.12); color: var(--acc); border: 1px solid rgba(56,225,196,.4); }
+
+/* 14-day revenue bar chart */
+.bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
+.bars .bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.bars .bar .fill { width: 100%; background: linear-gradient(180deg, var(--acc), rgba(56,225,196,.3)); border-radius: 2px 2px 0 0; min-height: 2px; }
+.bars .bar .lbl { color: var(--dim); font-family: var(--mono); font-size: 8px; margin-top: 4px; }

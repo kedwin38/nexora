@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, session, fmtKes } from '@/lib/api';
+import { api, session, fmtKes, getMe, can, isOwner, type Me, ApiCallError } from '@/lib/api';
 
 interface Summary {
   summary: {
@@ -71,58 +71,104 @@ interface SessionsResponse {
   data: Array<{ id: string; macAddress: string; ipAddress: string | null; status: string; downloadBytes: string; uploadBytes: string; customer: string }>;
 }
 
-type Tab = 'overview' | 'customers' | 'packages' | 'users' | 'ops' | 'triggers';
+type Tab = 'overview' | 'customers' | 'packages' | 'users' | 'ops' | 'billing' | 'settings' | 'triggers';
+
+// Each tab is visible only if the signed-in staff member holds the permission.
+const TAB_PERMS: Array<[Tab, string, string]> = [
+  ['overview', 'OVERVIEW', 'monitoring.read'],
+  ['customers', 'CUSTOMERS', 'customer.read'],
+  ['packages', 'PACKAGES', 'package.read'],
+  ['ops', 'NETWORK', 'network_operation.read'],
+  ['users', 'STAFF', 'user.read'],
+  ['billing', 'BILLING', 'payment.config.manage'],
+  ['settings', 'SETTINGS', 'tenant.manage'],
+  ['triggers', 'TRIGGERS', 'monitoring.read'],
+];
 
 export default function AdminPage() {
+  const [me, setMe] = useState<Me | null>(null);
+  const [tabs, setTabs] = useState<Array<[Tab, string]>>([]);
   const [tab, setTab] = useState<Tab>('overview');
   const [toast, setToast] = useState<string | null>(null);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
-  const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    void (async () => {
+      if (session.token('user') === null) {
+        window.location.href = '/auth/login';
+        return;
+      }
+      const identity = await getMe();
+      if (identity === null) {
+        window.location.href = '/auth/login';
+        return;
+      }
+      if (isOwner(identity)) {
+        window.location.href = '/owner';
+        return;
+      }
+      setMe(identity);
+      const visible = TAB_PERMS.filter(([, , perm]) => can(identity, perm)).map(([t, label]) => [t, label] as [Tab, string]);
+      setTabs(visible);
+      if (visible.length > 0 && !visible.some(([t]) => t === 'overview')) setTab(visible[0][0]);
+    })();
+  }, []);
+
+  const flash = useCallback((m: string) => {
+    setToast(m);
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  // Gentle error handler: only a 401 ends the session; a 403 on one widget
+  // (a role that lacks one sub-permission) just surfaces a toast.
   const call = useCallback(async <T,>(run: () => Promise<T>): Promise<T | null> => {
     try {
       return await run();
-    } catch {
-      session.signOut();
-      window.location.href = '/auth/login';
+    } catch (e) {
+      const err = e as ApiCallError;
+      if (err?.status === 401) {
+        session.signOut();
+        window.location.href = '/auth/login';
+      } else {
+        flash(err?.message ?? 'Request failed');
+      }
       return null;
     }
-  }, []);
-
-  useEffect(() => {
-    if (session.token('user') === null) {
-      window.location.href = '/auth/login';
-    }
-  }, []);
+  }, [flash]);
 
   const retryOp = async (id: string): Promise<void> => {
     await api(`/api/v1/admin/network-operations/${id}/retry`, { method: 'POST' });
-    setToast('Operation re-queued.');
+    flash('Operation re-queued.');
   };
+
+  if (me === null) return <main><div className="card mono">AUTHORIZING…</div></main>;
 
   return (
     <main>
-      <h1>ADMIN COMMAND CENTER</h1>
-      <div className="sub">// business state · desired state · actual state · audit</div>
+      <h1>ADMIN — {me.tenant.name}</h1>
+      <div className="sub">// {me.user.role} · business state · desired state · actual state · audit</div>
       {toast !== null && <div className="toast mono">{toast}</div>}
       <div className="tabs">
-        {(['overview', 'customers', 'packages', 'users', 'ops', 'triggers'] as Tab[]).map((t) => (
+        {tabs.map(([t, label]) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => { setTab(t); setDetail(null); }}>
-            {t.toUpperCase()}
+            {label}
           </button>
         ))}
       </div>
       {tab === 'overview' && <Overview call={call} />}
       {tab === 'customers' && <Customers call={call} detail={detail} setDetail={setDetail} />}
-      {tab === 'packages' && <Packages call={call} setToast={setToast} />}
-      {tab === 'users' && <Users call={call} setToast={setToast} />}
-      {tab === 'ops' && <Ops call={call} retryOp={retryOp} setToast={setToast} />}
-      {tab === 'triggers' && <Triggers call={call} setToast={setToast} />}
+      {tab === 'packages' && <Packages call={call} flash={flash} />}
+      {tab === 'users' && <Users call={call} flash={flash} />}
+      {tab === 'ops' && <Ops call={call} retryOp={retryOp} flash={flash} />}
+      {tab === 'billing' && <Billing call={call} flash={flash} />}
+      {tab === 'settings' && <Settings call={call} flash={flash} />}
+      {tab === 'triggers' && <Triggers call={call} flash={flash} />}
     </main>
   );
 }
 
 type CallFn = <T,>(run: () => Promise<T>) => Promise<T | null>;
+type Flash = (m: string) => void;
 
 function Overview({ call }: { call: CallFn }) {
   const [summary, setSummary] = useState<Summary['summary'] | null>(null);
@@ -131,15 +177,13 @@ function Overview({ call }: { call: CallFn }) {
 
   useEffect(() => {
     void call(async () => {
-      const [s, p, o] = await Promise.all([
-        api<Summary>('/api/v1/admin/summary'),
-        api<PaymentsResponse>('/api/v1/admin/payments?limit=12'),
-        api<OpsResponse>('/api/v1/admin/network-operations?limit=12'),
-      ]);
+      const s = await api<Summary>('/api/v1/admin/summary');
       setSummary(s.summary);
-      setPayments(p.data);
-      setOps(o.data);
     });
+    // Payments/ops are separately permissioned; load them independently so a
+    // role without payment.read still sees the summary.
+    void call(async () => setPayments((await api<PaymentsResponse>('/api/v1/admin/payments?limit=12')).data));
+    void call(async () => setOps((await api<OpsResponse>('/api/v1/admin/network-operations?limit=12')).data));
     const poll = setInterval(() => void call(async () => {
       setSummary((await api<Summary>('/api/v1/admin/summary')).summary);
     }), 15_000);
@@ -256,7 +300,7 @@ function Customers({ call, detail, setDetail }: { call: CallFn; detail: Customer
 
   return (
     <div className="card">
-      <div className="k">Customers — INSPECT for 3-pane state view (§4.5)</div><br />
+      <div className="k">Customers — INSPECT for 3-pane state view</div><br />
       <table>
         <thead><tr><th>Number</th><th>Type</th><th>Status</th><th>Phone</th><th>Package</th><th>Expiry</th><th></th></tr></thead>
         <tbody>
@@ -282,7 +326,7 @@ function Customers({ call, detail, setDetail }: { call: CallFn; detail: Customer
   );
 }
 
-function Packages({ call, setToast }: { call: CallFn; setToast: (t: string) => void }) {
+function Packages({ call, flash }: { call: CallFn; flash: Flash }) {
   const [packages, setPackages] = useState<PackagesResponse['data']>([]);
   const [form, setForm] = useState({ name: '', priceMinor: '', durationSeconds: '', downloadKbps: '', uploadKbps: '', fupLimitBytes: '' });
   const [busy, setBusy] = useState(false);
@@ -310,11 +354,11 @@ function Packages({ call, setToast }: { call: CallFn; setToast: (t: string) => v
           },
         }),
       });
-      setToast('Package created.');
+      flash('Package created.');
       setForm({ name: '', priceMinor: '', durationSeconds: '', downloadKbps: '', uploadKbps: '', fupLimitBytes: '' });
       load();
     } catch (e) {
-      setToast((e as Error).message);
+      flash((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -323,7 +367,7 @@ function Packages({ call, setToast }: { call: CallFn; setToast: (t: string) => v
   return (
     <div className="grid c2">
       <div className="card">
-        <div className="k">Packages (edits version — history immutable, §4.2)</div><br />
+        <div className="k">Packages (edits version — history immutable)</div><br />
         <table>
           <thead><tr><th>Name</th><th>v</th><th>Status</th><th>Price</th><th>Speed</th><th></th></tr></thead>
           <tbody>
@@ -334,7 +378,7 @@ function Packages({ call, setToast }: { call: CallFn; setToast: (t: string) => v
                 <td>{fmtKes(p.priceMinor)}</td>
                 <td>{p.policy ? `${p.policy.downloadKbps}/${p.policy.uploadKbps}k` : '—'}</td>
                 <td>{p.status === 'ACTIVE' && (
-                  <button className="ghost" onClick={() => void api(`/api/v1/admin/packages/${p.id}`, { method: 'DELETE' }).then(() => { setToast('Retired.'); load(); })}>RETIRE</button>
+                  <button className="ghost" onClick={() => void call(async () => { await api(`/api/v1/admin/packages/${p.id}`, { method: 'DELETE' }); flash('Retired.'); load(); })}>RETIRE</button>
                 )}</td>
               </tr>
             ))}
@@ -350,13 +394,13 @@ function Packages({ call, setToast }: { call: CallFn; setToast: (t: string) => v
         <input placeholder="download kbps" value={form.downloadKbps} onChange={(e) => setForm({ ...form, downloadKbps: e.target.value })} />
         <input placeholder="upload kbps" value={form.uploadKbps} onChange={(e) => setForm({ ...form, uploadKbps: e.target.value })} />
         <input placeholder="FUP limit bytes (optional)" value={form.fupLimitBytes} onChange={(e) => setForm({ ...form, fupLimitBytes: e.target.value })} />
-        <button disabled={busy} onClick={create}>CREATE</button>
+        <button disabled={busy} onClick={() => void create()}>CREATE</button>
       </div>
     </div>
   );
 }
 
-function Users({ call, setToast }: { call: CallFn; setToast: (t: string) => void }) {
+function Users({ call, flash }: { call: CallFn; flash: Flash }) {
   const [users, setUsers] = useState<UsersResponse['data']>([]);
   const [roles, setRoles] = useState<RolesResponse['data']>([]);
   const [form, setForm] = useState({ email: '', password: '', displayName: '', role: 'SUPPORT_AGENT' });
@@ -376,17 +420,17 @@ function Users({ call, setToast }: { call: CallFn; setToast: (t: string) => void
   const assignRole = async (userId: string, role: string): Promise<void> => {
     try {
       await api(`/api/v1/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) });
-      setToast(`Role → ${role}; live sessions revoked.`);
+      flash(`Role → ${role}; live sessions revoked.`);
       load();
     } catch (e) {
-      setToast((e as Error).message);
+      flash((e as Error).message);
     }
   };
 
   return (
     <div className="grid c2">
       <div className="card">
-        <div className="k">Staff users (role changes revoke sessions — §4.3)</div><br />
+        <div className="k">Staff users (role changes revoke sessions)</div><br />
         <table>
           <thead><tr><th>Email</th><th>Role</th><th>Status</th></tr></thead>
           <tbody>
@@ -394,11 +438,7 @@ function Users({ call, setToast }: { call: CallFn; setToast: (t: string) => void
               <tr key={u.id}>
                 <td>{u.email}</td>
                 <td>
-                  <select
-                    value={u.role}
-                    onChange={(e) => void assignRole(u.id, e.target.value)}
-                    style={{ width: 'auto', padding: 4, marginBottom: 0 }}
-                  >
+                  <select value={u.role} onChange={(e) => void assignRole(u.id, e.target.value)} style={{ width: 'auto', padding: 4, marginBottom: 0 }}>
                     {roles.map((r) => <option key={r.name}>{r.name}</option>)}
                   </select>
                 </td>
@@ -416,7 +456,7 @@ function Users({ call, setToast }: { call: CallFn; setToast: (t: string) => void
         <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
           {roles.map((r) => <option key={r.name}>{r.name}</option>)}
         </select>
-        <button onClick={() => void api('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(form) }).then(() => { setToast('User created.'); load(); }).catch((e: Error) => setToast(e.message))}>
+        <button onClick={() => void call(async () => { await api('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(form) }); flash('User created.'); load(); })}>
           CREATE
         </button>
       </div>
@@ -424,7 +464,7 @@ function Users({ call, setToast }: { call: CallFn; setToast: (t: string) => void
   );
 }
 
-function Ops({ call, retryOp, setToast }: { call: CallFn; retryOp: (id: string) => Promise<void>; setToast: (t: string) => void }) {
+function Ops({ call, retryOp, flash }: { call: CallFn; retryOp: (id: string) => Promise<void>; flash: Flash }) {
   const [sessions, setSessions] = useState<SessionsResponse['data']>([]);
   const [ops, setOps] = useState<OpsResponse['data']>([]);
 
@@ -452,7 +492,7 @@ function Ops({ call, retryOp, setToast }: { call: CallFn; retryOp: (id: string) 
                 <td>{s.customer}</td><td className="mono">{s.macAddress}</td>
                 <td><span className={`pill ${s.status}`}>{s.status}</span></td>
                 <td>{s.downloadBytes}/{s.uploadBytes}</td>
-                <td><button className="ghost" onClick={() => void api(`/api/v1/admin/sessions/${s.id}/disconnect`, { method: 'POST' }).then(() => { setToast('Disconnect queued.'); load(); })}>DISCONNECT</button></td>
+                <td><button className="ghost" onClick={() => void call(async () => { await api(`/api/v1/admin/sessions/${s.id}/disconnect`, { method: 'POST' }); flash('Disconnect queued.'); load(); })}>DISCONNECT</button></td>
               </tr>
             ))}
             {sessions.length === 0 && <tr><td colSpan={5} className="sub">no active sessions</td></tr>}
@@ -479,38 +519,182 @@ function Ops({ call, retryOp, setToast }: { call: CallFn; retryOp: (id: string) 
   );
 }
 
-function Triggers({ call, setToast }: { call: CallFn; setToast: (t: string) => void }) {
-  const [config, setConfig] = useState<{ provider: string; daraja: { configured: boolean; environment: string; callbackUrl: string | null } } | null>(null);
+// ---- Billing: the company's OWN platform subscription (ISP pays NEXORA) ---
 
-  useEffect(() => {
+interface BillingResponse {
+  plan: { code: string; name: string; priceMinor: number; interval: string } | null;
+  planStatus: string;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  invoices: Array<{ id: string; number: string; plan: string | null; amountMinor: number; status: string; dueDate: string; periodEnd: string; paidAt: string | null; paymentInFlight: boolean }>;
+}
+
+function Billing({ call, flash }: { call: CallFn; flash: Flash }) {
+  const [data, setData] = useState<BillingResponse | null>(null);
+
+  const load = useCallback((): void => {
+    void call(async () => setData(await api<BillingResponse>('/api/v1/admin/billing')));
+  }, [call]);
+  useEffect(load, [load]);
+
+  const pay = async (id: string): Promise<void> => {
+    const phone = window.prompt('M-Pesa phone number to charge (e.g. 0712345678):');
+    if (phone === null || phone.trim() === '') return;
+    try {
+      await api(`/api/v1/admin/billing/invoices/${id}/pay`, { method: 'POST', body: JSON.stringify({ phone }) });
+      flash('STK push sent — approve on your phone.');
+      setTimeout(load, 4000);
+    } catch (e) {
+      flash((e as Error).message);
+    }
+  };
+
+  if (data === null) return <div className="card mono">LOADING…</div>;
+
+  return (
+    <div className="grid c2" style={{ alignItems: 'start' }}>
+      <div className="card">
+        <div className="k">Your NEXORA subscription</div><br />
+        <table><tbody>
+          <tr><td>Plan</td><td>{data.plan ? `${data.plan.name} · ${fmtKes(data.plan.priceMinor)}/${data.plan.interval.toLowerCase()}` : 'none assigned'}</td></tr>
+          <tr><td>Status</td><td><span className={`pill ${data.planStatus === 'ACTIVE' || data.planStatus === 'TRIALING' ? 'ACTIVE' : data.planStatus === 'PAST_DUE' ? 'FAILED' : 'PENDING'}`}>{data.planStatus}</span></td></tr>
+          <tr><td>Trial ends</td><td>{data.trialEndsAt ? new Date(data.trialEndsAt).toLocaleDateString() : '—'}</td></tr>
+          <tr><td>Period ends</td><td>{data.currentPeriodEnd ? new Date(data.currentPeriodEnd).toLocaleDateString() : '—'}</td></tr>
+        </tbody></table>
+        <p className="sub" style={{ marginTop: 10, lineHeight: 1.5 }}>Pay an outstanding invoice by STK push to the NEXORA platform. Your own customer billing is configured under Settings.</p>
+      </div>
+      <div className="card">
+        <div className="k">Invoices</div><br />
+        <table>
+          <thead><tr><th>Number</th><th>Period</th><th>Amount</th><th>Due</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {data.invoices.map((i) => (
+              <tr key={i.id}>
+                <td className="mono">{i.number}</td>
+                <td>{i.periodEnd ? new Date(i.periodEnd).toLocaleDateString() : '—'}</td>
+                <td>{fmtKes(i.amountMinor)}</td>
+                <td>{new Date(i.dueDate).toLocaleDateString()}</td>
+                <td><span className={`pill ${i.status}`}>{i.status}</span></td>
+                <td>{(i.status === 'PENDING' || i.status === 'OVERDUE')
+                  ? (i.paymentInFlight ? <span className="sub">paying…</span> : <button className="ghost" onClick={() => void pay(i.id)}>PAY</button>)
+                  : (i.paidAt ? new Date(i.paidAt).toLocaleDateString() : '')}</td>
+              </tr>
+            ))}
+            {data.invoices.length === 0 && <tr><td colSpan={6} className="sub">no invoices yet — you may be on a free trial</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ---- Settings: the company's OWN M-Pesa config + profile ------------------
+
+interface TenantConfig {
+  tenant: { name: string; slug: string; status: string; contactEmail: string | null; contactPhone: string | null; supportPhone: string | null; supportEmail: string | null };
+  payment: { channel: string | null; environment: string | null; shortcode: string | null; partyB: string | null; credentialsConfigured: boolean; encryptionAvailable: boolean };
+}
+
+function Settings({ call, flash }: { call: CallFn; flash: Flash }) {
+  const [cfg, setCfg] = useState<TenantConfig | null>(null);
+  const [pay, setPay] = useState({ channel: 'PAYBILL', env: 'sandbox', shortcode: '', partyB: '', consumerKey: '', consumerSecret: '', passkey: '' });
+  const [profile, setProfile] = useState({ name: '', supportPhone: '', supportEmail: '' });
+
+  const load = useCallback((): void => {
     void call(async () => {
-      setConfig(await api('/api/v1/admin/payment-config'));
+      const r = await api<TenantConfig>('/api/v1/admin/tenant');
+      setCfg(r);
+      setPay((p) => ({ ...p, channel: r.payment.channel ?? 'PAYBILL', env: r.payment.environment ?? 'sandbox', shortcode: r.payment.shortcode ?? '', partyB: r.payment.partyB ?? '' }));
+      setProfile({ name: r.tenant.name, supportPhone: r.tenant.supportPhone ?? '', supportEmail: r.tenant.supportEmail ?? '' });
     });
   }, [call]);
+  useEffect(load, [load]);
 
+  const saveMpesa = async (): Promise<void> => {
+    try {
+      const body: Record<string, string> = { channel: pay.channel, env: pay.env, shortcode: pay.shortcode };
+      if (pay.partyB) body.partyB = pay.partyB;
+      if (pay.consumerKey) body.consumerKey = pay.consumerKey;
+      if (pay.consumerSecret) body.consumerSecret = pay.consumerSecret;
+      if (pay.passkey) body.passkey = pay.passkey;
+      await api('/api/v1/admin/tenant/payment-config', { method: 'PUT', body: JSON.stringify(body) });
+      flash('M-Pesa configuration saved.');
+      setPay((p) => ({ ...p, consumerKey: '', consumerSecret: '', passkey: '' }));
+      load();
+    } catch (e) {
+      flash((e as Error).message);
+    }
+  };
+
+  const saveProfile = async (): Promise<void> => {
+    try {
+      await api('/api/v1/admin/tenant', { method: 'PATCH', body: JSON.stringify({ name: profile.name, supportPhone: profile.supportPhone, supportEmail: profile.supportEmail }) });
+      flash('Company profile saved.');
+    } catch (e) {
+      flash((e as Error).message);
+    }
+  };
+
+  if (cfg === null) return <div className="card mono">LOADING…</div>;
+
+  return (
+    <div className="grid c2" style={{ alignItems: 'start' }}>
+      <div className="card">
+        <div className="k">M-Pesa — how you collect from YOUR customers</div><br />
+        <table><tbody>
+          <tr><td>Credentials</td><td><span className={`pill ${cfg.payment.credentialsConfigured ? 'SUCCESS' : 'PENDING'}`}>{cfg.payment.credentialsConfigured ? 'configured' : 'not set'}</span></td></tr>
+          <tr><td>Encryption</td><td><span className={`pill ${cfg.payment.encryptionAvailable ? 'SUCCESS' : 'FAILED'}`}>{cfg.payment.encryptionAvailable ? 'available' : 'KEY MISSING'}</span></td></tr>
+        </tbody></table>
+        <br />
+        <label className="f">Channel</label>
+        <select value={pay.channel} onChange={(e) => setPay({ ...pay, channel: e.target.value })}>
+          <option value="PAYBILL">PAYBILL</option><option value="TILL">TILL (Buy Goods)</option>
+        </select>
+        <label className="f">Environment</label>
+        <select value={pay.env} onChange={(e) => setPay({ ...pay, env: e.target.value })}>
+          <option value="sandbox">sandbox</option><option value="production">production</option>
+        </select>
+        <label className="f">Shortcode / store</label>
+        <input value={pay.shortcode} onChange={(e) => setPay({ ...pay, shortcode: e.target.value })} />
+        <label className="f">Till / Party B (optional)</label>
+        <input value={pay.partyB} onChange={(e) => setPay({ ...pay, partyB: e.target.value })} />
+        <label className="f">Consumer key (blank = keep)</label>
+        <input type="password" value={pay.consumerKey} onChange={(e) => setPay({ ...pay, consumerKey: e.target.value })} />
+        <label className="f">Consumer secret</label>
+        <input type="password" value={pay.consumerSecret} onChange={(e) => setPay({ ...pay, consumerSecret: e.target.value })} />
+        <label className="f">Passkey</label>
+        <input type="password" value={pay.passkey} onChange={(e) => setPay({ ...pay, passkey: e.target.value })} />
+        <button onClick={() => void saveMpesa()}>SAVE M-PESA</button>
+      </div>
+      <div className="card">
+        <div className="k">Company profile</div><br />
+        <label className="f">Company name</label>
+        <input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
+        <label className="f">Support phone</label>
+        <input value={profile.supportPhone} onChange={(e) => setProfile({ ...profile, supportPhone: e.target.value })} />
+        <label className="f">Support email</label>
+        <input value={profile.supportEmail} onChange={(e) => setProfile({ ...profile, supportEmail: e.target.value })} />
+        <button onClick={() => void saveProfile()}>SAVE PROFILE</button>
+        <p className="sub" style={{ marginTop: 12, lineHeight: 1.5 }}>Handle <span className="mono">{cfg.tenant.slug}</span> · status <span className={`pill ${cfg.tenant.status}`}>{cfg.tenant.status}</span></p>
+      </div>
+    </div>
+  );
+}
+
+function Triggers({ call, flash }: { call: CallFn; flash: Flash }) {
   return (
     <div className="grid c2">
       <div className="card">
-        <div className="k">Payment configuration (§4.1)</div><br />
-        {config !== null ? (
-          <table>
-            <tbody>
-              <tr><td>Provider</td><td className="mono">{config.provider}</td></tr>
-              <tr><td>Daraja configured</td><td><span className={`pill ${config.daraja.configured ? 'ACTIVE' : 'PENDING'}`}>{String(config.daraja.configured)}</span></td></tr>
-              <tr><td>Daraja env</td><td>{config.daraja.environment}</td></tr>
-              <tr><td>Callback URL</td><td className="mono">{config.daraja.callbackUrl ?? 'not set'}</td></tr>
-            </tbody>
-          </table>
-        ) : 'LOADING…'}
-        <p className="sub" style={{ marginTop: 8 }}>Secrets live in Railway Variables — this view reports presence only.</p>
-        <button className="ghost" onClick={() => void api('/api/v1/admin/payment-config/reconcile', { method: 'POST' }).then(() => setToast('Payment reconciliation queued.')).catch((e: Error) => setToast(e.message))}>
+        <div className="k">Payment reconciliation</div><br />
+        <p className="sub" style={{ lineHeight: 1.5 }}>Sweeps in-flight payments to a terminal state (SUCCESS / CANCELLED / EXPIRED) so nothing hangs.</p>
+        <button className="ghost" onClick={() => void call(async () => { await api('/api/v1/admin/payment-config/reconcile', { method: 'POST' }); flash('Payment reconciliation queued.'); })}>
           RUN PAYMENT RECONCILIATION
         </button>
       </div>
       <div className="card">
-        <div className="k">Network reconciliation (§4.4)</div><br />
-        <p className="sub">Detects desired-vs-actual drift across subscribers and queues repair operations with read-back verification.</p>
-        <button className="ghost" onClick={() => void api('/api/v1/admin/network/reconcile', { method: 'POST' }).then(() => setToast('Network reconciliation queued.')).catch((e: Error) => setToast(e.message))}>
+        <div className="k">Network reconciliation</div><br />
+        <p className="sub" style={{ lineHeight: 1.5 }}>Detects desired-vs-actual drift across subscribers and queues repair operations with read-back verification.</p>
+        <button className="ghost" onClick={() => void call(async () => { await api('/api/v1/admin/network/reconcile', { method: 'POST' }); flash('Network reconciliation queued.'); })}>
           RUN NETWORK RECONCILIATION
         </button>
       </div>

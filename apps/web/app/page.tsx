@@ -2,14 +2,23 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { session } from '@/lib/api';
+import { session, getMe, isOwner } from '@/lib/api';
 
 export default function Home() {
   const router = useRouter();
   useEffect(() => {
-    if (session.token('customer')) router.replace('/dashboard');
-    else if (session.token('user')) router.replace('/admin');
-    else router.replace('/auth/login');
+    void (async () => {
+      if (session.token('customer') !== null && session.token('user') === null) {
+        router.replace('/dashboard');
+        return;
+      }
+      if (session.token('user') !== null) {
+        const me = await getMe();
+        router.replace(isOwner(me) ? '/owner' : '/admin');
+        return;
+      }
+      router.replace('/auth/login');
+    })();
   }, [router]);
   return (
     <main>

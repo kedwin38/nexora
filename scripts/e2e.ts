@@ -638,6 +638,23 @@ async function main(): Promise<void> {
       const platformForbidden = await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/summary`, { headers: { Authorization: `Bearer ${signupBody.token}` } });
       check('tenant admin denied on platform endpoint (403)', platformForbidden.status === 403);
 
+      // ---- Flow O: owner onboards a company directly (independent of public signup) ----
+      const ownerCreateEmail = `owner-made-${Date.now().toString(36)}@isp.test`;
+      const ownerCreate = await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/tenants`, {
+        method: 'POST', headers: { ...ownerAuth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: 'Owner Made ISP', adminName: 'Made Admin', adminEmail: ownerCreateEmail, adminPassword: 'owner-made-pw-123' }),
+      });
+      const ownerCreateBody = (await ownerCreate.json()) as { tenant?: { id: string; slug: string }; admin?: { email: string } };
+      check('owner creates a company directly (201 + admin)', ownerCreate.status === 201 && ownerCreateBody.tenant?.id !== undefined && ownerCreateBody.admin?.email === ownerCreateEmail);
+      // The created admin can sign in and reach their own company's admin surface.
+      const madeLogin = await fetch(`http://127.0.0.1:${PORT}/api/v1/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ownerCreateEmail, password: 'owner-made-pw-123' }) });
+      const madeLoginBody = (await madeLogin.json()) as { token?: string; user?: { role: string } };
+      const madeSummary = madeLoginBody.token !== undefined ? await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/summary`, { headers: { Authorization: `Bearer ${madeLoginBody.token}` } }) : null;
+      check('owner-created admin logs in as SUPER_ADMIN and sees their company', madeLogin.status === 200 && madeLoginBody.user?.role === 'SUPER_ADMIN' && madeSummary?.status === 200);
+      // The new company got its own cloned starter catalogue.
+      const madeCatalogue = ownerCreateBody.tenant !== undefined ? await prisma.package.count({ where: { tenantId: ownerCreateBody.tenant.id, status: 'ACTIVE' } }) : 0;
+      check('owner-created company has a cloned starter catalogue', madeCatalogue >= 1, `packages=${madeCatalogue}`);
+
       // ---- Flow N: network provisioning is tenant-scoped (autopsy F1/F2) ----
       // Give Acme its own router + customer, confirm a payment, and verify the
       // AUTHORIZE lands on ACME's router — never the default company's.

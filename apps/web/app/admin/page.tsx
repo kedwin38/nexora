@@ -108,11 +108,22 @@ export default function AdminPage() {
         return;
       }
       setMe(identity);
-      const visible = TAB_PERMS.filter(([, , perm]) => can(identity, perm)).map(([t, label]) => [t, label] as [Tab, string]);
+      const visible: Array<[Tab, string]> = [];
+      for (const [t, label, perm] of TAB_PERMS) {
+        // Triggers exposes two independent operational actions — show it if the
+        // caller can run either reconciliation.
+        if (t === 'triggers') {
+          if (can(identity, 'payment.reconciliation.run') || can(identity, 'router.manage')) visible.push([t, label]);
+        } else if (can(identity, perm)) {
+          visible.push([t, label]);
+        }
+      }
       setTabs(visible);
       if (visible.length > 0 && !visible.some(([t]) => t === 'overview')) setTab(visible[0][0]);
     })();
   }, []);
+
+  const has = useCallback((p: string) => me?.permissions.includes(p) ?? false, [me]);
 
   const flash = useCallback((m: string) => {
     setToast(m);
@@ -155,40 +166,43 @@ export default function AdminPage() {
           </button>
         ))}
       </div>
-      {tab === 'overview' && <Overview call={call} />}
+      {tab === 'overview' && <Overview call={call} has={has} />}
       {tab === 'customers' && <Customers call={call} detail={detail} setDetail={setDetail} />}
-      {tab === 'packages' && <Packages call={call} flash={flash} />}
+      {tab === 'packages' && <Packages call={call} flash={flash} has={has} />}
       {tab === 'users' && <Users call={call} flash={flash} />}
       {tab === 'ops' && <Ops call={call} retryOp={retryOp} flash={flash} />}
       {tab === 'billing' && <Billing call={call} flash={flash} />}
       {tab === 'settings' && <Settings call={call} flash={flash} />}
-      {tab === 'triggers' && <Triggers call={call} flash={flash} />}
+      {tab === 'triggers' && <Triggers call={call} flash={flash} has={has} />}
     </main>
   );
 }
 
 type CallFn = <T,>(run: () => Promise<T>) => Promise<T | null>;
 type Flash = (m: string) => void;
+type Has = (p: string) => boolean;
 
-function Overview({ call }: { call: CallFn }) {
+function Overview({ call, has }: { call: CallFn; has: Has }) {
   const [summary, setSummary] = useState<Summary['summary'] | null>(null);
   const [payments, setPayments] = useState<PaymentsResponse['data']>([]);
   const [ops, setOps] = useState<OpsResponse['data']>([]);
+  const showPayments = has('payment.read');
+  const showOps = has('network_operation.read');
 
   useEffect(() => {
     void call(async () => {
       const s = await api<Summary>('/api/v1/admin/summary');
       setSummary(s.summary);
     });
-    // Payments/ops are separately permissioned; load them independently so a
-    // role without payment.read still sees the summary.
-    void call(async () => setPayments((await api<PaymentsResponse>('/api/v1/admin/payments?limit=12')).data));
-    void call(async () => setOps((await api<OpsResponse>('/api/v1/admin/network-operations?limit=12')).data));
+    // Payments/ops widgets are separately permissioned — only fetch what this
+    // role may read, so a NETWORK_ADMIN or ANALYST sees no spurious errors.
+    if (showPayments) void call(async () => setPayments((await api<PaymentsResponse>('/api/v1/admin/payments?limit=12')).data));
+    if (showOps) void call(async () => setOps((await api<OpsResponse>('/api/v1/admin/network-operations?limit=12')).data));
     const poll = setInterval(() => void call(async () => {
       setSummary((await api<Summary>('/api/v1/admin/summary')).summary);
     }), 15_000);
     return () => clearInterval(poll);
-  }, [call]);
+  }, [call, showPayments, showOps]);
 
   if (summary === null) return <div className="card mono">LOADING…</div>;
 
@@ -207,6 +221,7 @@ function Overview({ call }: { call: CallFn }) {
       </div>
       <br />
       <div className="grid c2">
+        {showPayments && (
         <div className="card">
           <div className="k">Recent payments</div><br />
           <table>
@@ -225,6 +240,8 @@ function Overview({ call }: { call: CallFn }) {
             </tbody>
           </table>
         </div>
+        )}
+        {showOps && (
         <div className="card">
           <div className="k">Network operations</div><br />
           <table>
@@ -237,6 +254,7 @@ function Overview({ call }: { call: CallFn }) {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </>
   );
@@ -326,10 +344,11 @@ function Customers({ call, detail, setDetail }: { call: CallFn; detail: Customer
   );
 }
 
-function Packages({ call, flash }: { call: CallFn; flash: Flash }) {
+function Packages({ call, flash, has }: { call: CallFn; flash: Flash; has: Has }) {
   const [packages, setPackages] = useState<PackagesResponse['data']>([]);
   const [form, setForm] = useState({ name: '', priceMinor: '', durationSeconds: '', downloadKbps: '', uploadKbps: '', fupLimitBytes: '' });
   const [busy, setBusy] = useState(false);
+  const canWrite = has('package.write');
 
   const load = useCallback((): void => {
     void call(async () => {
@@ -377,7 +396,7 @@ function Packages({ call, flash }: { call: CallFn; flash: Flash }) {
                 <td><span className={`pill ${p.status === 'ACTIVE' ? 'ACTIVE' : 'PENDING'}`}>{p.status}</span></td>
                 <td>{fmtKes(p.priceMinor)}</td>
                 <td>{p.policy ? `${p.policy.downloadKbps}/${p.policy.uploadKbps}k` : '—'}</td>
-                <td>{p.status === 'ACTIVE' && (
+                <td>{canWrite && p.status === 'ACTIVE' && (
                   <button className="ghost" onClick={() => void call(async () => { await api(`/api/v1/admin/packages/${p.id}`, { method: 'DELETE' }); flash('Retired.'); load(); })}>RETIRE</button>
                 )}</td>
               </tr>
@@ -386,6 +405,7 @@ function Packages({ call, flash }: { call: CallFn; flash: Flash }) {
           </tbody>
         </table>
       </div>
+      {canWrite ? (
       <div className="card">
         <div className="k">Create package</div><br />
         <input placeholder="name (e.g. Month Pass)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -396,6 +416,9 @@ function Packages({ call, flash }: { call: CallFn; flash: Flash }) {
         <input placeholder="FUP limit bytes (optional)" value={form.fupLimitBytes} onChange={(e) => setForm({ ...form, fupLimitBytes: e.target.value })} />
         <button disabled={busy} onClick={() => void create()}>CREATE</button>
       </div>
+      ) : (
+        <div className="card muted"><div className="k">Read-only</div><p className="sub" style={{ marginTop: 8 }}>Your role can view the catalogue but not edit it.</p></div>
+      )}
     </div>
   );
 }
@@ -681,23 +704,27 @@ function Settings({ call, flash }: { call: CallFn; flash: Flash }) {
   );
 }
 
-function Triggers({ call, flash }: { call: CallFn; flash: Flash }) {
+function Triggers({ call, flash, has }: { call: CallFn; flash: Flash; has: Has }) {
   return (
     <div className="grid c2">
-      <div className="card">
-        <div className="k">Payment reconciliation</div><br />
-        <p className="sub" style={{ lineHeight: 1.5 }}>Sweeps in-flight payments to a terminal state (SUCCESS / CANCELLED / EXPIRED) so nothing hangs.</p>
-        <button className="ghost" onClick={() => void call(async () => { await api('/api/v1/admin/payment-config/reconcile', { method: 'POST' }); flash('Payment reconciliation queued.'); })}>
-          RUN PAYMENT RECONCILIATION
-        </button>
-      </div>
-      <div className="card">
-        <div className="k">Network reconciliation</div><br />
-        <p className="sub" style={{ lineHeight: 1.5 }}>Detects desired-vs-actual drift across subscribers and queues repair operations with read-back verification.</p>
-        <button className="ghost" onClick={() => void call(async () => { await api('/api/v1/admin/network/reconcile', { method: 'POST' }); flash('Network reconciliation queued.'); })}>
-          RUN NETWORK RECONCILIATION
-        </button>
-      </div>
+      {has('payment.reconciliation.run') && (
+        <div className="card">
+          <div className="k">Payment reconciliation</div><br />
+          <p className="sub" style={{ lineHeight: 1.5 }}>Sweeps in-flight payments to a terminal state (SUCCESS / CANCELLED / EXPIRED) so nothing hangs.</p>
+          <button className="ghost" onClick={() => void call(async () => { await api('/api/v1/admin/payment-config/reconcile', { method: 'POST' }); flash('Payment reconciliation queued.'); })}>
+            RUN PAYMENT RECONCILIATION
+          </button>
+        </div>
+      )}
+      {has('router.manage') && (
+        <div className="card">
+          <div className="k">Network reconciliation</div><br />
+          <p className="sub" style={{ lineHeight: 1.5 }}>Detects desired-vs-actual drift across subscribers and queues repair operations with read-back verification.</p>
+          <button className="ghost" onClick={() => void call(async () => { await api('/api/v1/admin/network/reconcile', { method: 'POST' }); flash('Network reconciliation queued.'); })}>
+            RUN NETWORK RECONCILIATION
+          </button>
+        </div>
+      )}
     </div>
   );
 }

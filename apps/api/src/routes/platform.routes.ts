@@ -16,6 +16,7 @@ import { runPlatformBillingCycle, runMonitorCycle } from '@nexora/engines';
 import type { NexoraContext } from '../context.js';
 import { writeAudit } from '../plugins/auth.js';
 import { createOutboxEvent } from '../outbox.js';
+import { provisionCompany } from '../services/provision-company.js';
 
 function parseOrThrow<T extends z.ZodTypeAny>(schema: T, body: unknown, requestId: string): z.infer<T> {
   const parsed = schema.safeParse(body);
@@ -164,6 +165,43 @@ export async function registerPlatformRoutes(app: FastifyInstance, nexora: Nexor
         },
         stats: { customers, staff, activeSubscriptions, revenueMinor: revenue._sum.amountMinor ?? 0, routers },
       });
+    },
+  );
+
+  // Owner-initiated company onboarding — the elite owner can provision an ISP
+  // directly, independent of the public ALLOW_TENANT_SIGNUP flag. Optionally
+  // assigns a subscription plan (starting a trial) in the same step.
+  const createCompanySchema = z.object({
+    companyName: z.string().min(2).max(120),
+    adminName: z.string().min(1).max(100),
+    adminEmail: z.string().email(),
+    adminPassword: z.string().min(10, 'Admin password must be at least 10 characters'),
+    contactPhone: z.string().max(32).optional(),
+    planId: z.string().uuid().nullable().optional(),
+  });
+
+  app.post<{ Body: unknown }>(
+    '/api/v1/platform/tenants',
+    { preHandler: [app.requirePlatformOwner] },
+    async (request, reply) => {
+      const input = parseOrThrow(createCompanySchema, request.body, request.id);
+      const result = await provisionCompany(
+        nexora,
+        { companyName: input.companyName, adminName: input.adminName, adminEmail: input.adminEmail, adminPassword: input.adminPassword, ...(input.contactPhone !== undefined ? { contactPhone: input.contactPhone } : {}) },
+        { actor: request.principal, correlationId: request.id, ipAddress: request.ip },
+      );
+      // Optional: assign a plan immediately (starts a trial).
+      if (input.planId !== undefined && input.planId !== null) {
+        const plan = await nexora.prisma.subscriptionPlan.findUnique({ where: { id: input.planId } });
+        if (plan === null) throw new NotFoundError('SubscriptionPlan', input.planId, request.id);
+        const now = new Date();
+        const trialEnds = new Date(now.getTime() + plan.trialDays * 24 * 60 * 60 * 1000);
+        await nexora.prisma.tenant.update({
+          where: { id: result.tenant.id },
+          data: { planId: plan.id, planStatus: 'TRIALING', trialEndsAt: trialEnds, currentPeriodEnd: trialEnds },
+        });
+      }
+      return await reply.status(201).send({ tenant: result.tenant, admin: result.user });
     },
   );
 

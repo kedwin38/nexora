@@ -679,6 +679,61 @@ async function main(): Promise<void> {
       const darajaAfter = await prisma.payment.findUniqueOrThrow({ where: { id: darajaPay.id } });
       check('real Daraja callback confirmed under mock platform default (F3)', darajaCb.status === 200 && darajaAfter.status === 'SUCCESS' && darajaAfter.receipt === 'REALRCPT99');
 
+      // ---- Flow P: platform billing (owner sells subscription tiers to ISPs) ----
+      // Owner assigns Acme a plan (trial). We backdate the covered period so the
+      // billing cycle raises a PENDING invoice; Acme pays it via STK to the
+      // PLATFORM's own M-Pesa; the callback marks it PAID and restores ACTIVE.
+      const starterPlan = await prisma.subscriptionPlan.findUniqueOrThrow({ where: { code: 'starter' } });
+      const assignPlan = await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/tenants/${acmeId}/plan`, { method: 'PUT', headers: { ...ownerAuth, 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: starterPlan.id }) });
+      const assignBody = (await assignPlan.json()) as { planStatus?: string };
+      check('owner assigns a subscription plan (trial starts)', assignPlan.status === 200 && assignBody.planStatus === 'TRIALING');
+
+      // Backdate the period so the recurring cycle bills it now.
+      await prisma.tenant.update({ where: { id: acmeId }, data: { currentPeriodEnd: new Date(Date.now() - 1_000) } });
+      const runBilling = await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/billing/run`, { method: 'POST', headers: ownerAuth });
+      const billBody = (await runBilling.json()) as { invoicesIssued?: number };
+      check('billing cycle issues a platform invoice for the lapsed period', runBilling.status === 200 && (billBody.invoicesIssued ?? 0) >= 1);
+      const acmeInvoice = await prisma.platformInvoice.findFirstOrThrow({ where: { tenantId: acmeId, status: 'PENDING' } });
+
+      // Owner's invoice list spans all tenants and includes this one.
+      const ownerInvoices = await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/invoices`, { headers: ownerAuth });
+      const ownerInvBody = (await ownerInvoices.json()) as { data: Array<{ id: string }> };
+      check('owner invoice list includes the issued invoice', ownerInvoices.status === 200 && ownerInvBody.data.some((i) => i.id === acmeInvoice.id));
+
+      // Acme initiates payment (STK to the platform shortcode).
+      const payInv = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/billing/invoices/${acmeInvoice.id}/pay`, { method: 'POST', headers: { Authorization: `Bearer ${signupBody.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '0799000222' }) });
+      check('ISP initiates invoice payment (202, STK in flight)', payInv.status === 202);
+      // A second attempt while one is in flight is refused — never double-charges.
+      const payTwice = await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/billing/invoices/${acmeInvoice.id}/pay`, { method: 'POST', headers: { Authorization: `Bearer ${signupBody.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '0799000222' }) });
+      check('duplicate invoice payment refused while one is in flight (409)', payTwice.status === 409);
+
+      // Provider callback confirms → invoice PAID + tenant restored to ACTIVE.
+      const inFlightInv = await prisma.platformInvoice.findUniqueOrThrow({ where: { id: acmeInvoice.id } });
+      await fetch(`http://127.0.0.1:${PORT}/api/v1/webhooks/mpesa`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ Body: { stkCallback: { CheckoutRequestID: inFlightInv.providerTransactionId, ResultCode: 0, ResultDesc: 'ok', CallbackMetadata: { Item: [ { Name: 'Amount', Value: acmeInvoice.amountMinor / 100 }, { Name: 'MpesaReceiptNumber', Value: 'PLATRCPT1' } ] } } } }) });
+      await sleep(400);
+      const paidInv = await prisma.platformInvoice.findUniqueOrThrow({ where: { id: acmeInvoice.id } });
+      const acmeAfterPay = await prisma.tenant.findUniqueOrThrow({ where: { id: acmeId } });
+      check('platform invoice paid via callback → PAID + tenant ACTIVE', paidInv.status === 'PAID' && paidInv.receipt === 'PLATRCPT1' && acmeAfterPay.planStatus === 'ACTIVE');
+
+      // No-hang: a cancelled STK on an invoice closes the ATTEMPT but leaves the
+      // invoice owed so it can be retried (mirrors customer-payment tracking).
+      const retryInvoice = await prisma.platformInvoice.create({
+        data: { number: `INV-E2E-${Date.now().toString(36).toUpperCase()}`, tenantId: acmeId, planId: starterPlan.id, amountMinor: starterPlan.priceMinor, currency: starterPlan.currency, periodStart: new Date(), periodEnd: new Date(Date.now() + 30 * 86_400_000), dueDate: new Date(Date.now() + 7 * 86_400_000), status: 'PENDING' },
+      });
+      await fetch(`http://127.0.0.1:${PORT}/api/v1/admin/billing/invoices/${retryInvoice.id}/pay`, { method: 'POST', headers: { Authorization: `Bearer ${signupBody.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '0799000222' }) });
+      const retryInFlight = await prisma.platformInvoice.findUniqueOrThrow({ where: { id: retryInvoice.id } });
+      await fetch(`http://127.0.0.1:${PORT}/api/v1/webhooks/mpesa`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ providerTransactionId: retryInFlight.providerTransactionId, resultCode: 1032, resultDesc: 'Request cancelled by user' }) });
+      await sleep(300);
+      const retryAfter = await prisma.platformInvoice.findUniqueOrThrow({ where: { id: retryInvoice.id } });
+      check('cancelled invoice STK closes the attempt, invoice stays owed (no hang)', retryAfter.status === 'PENDING' && retryAfter.providerTransactionId === null && retryAfter.failureReason !== null);
+
+      // ---- Flow M: AI operations monitor writes insights the owner can read ----
+      const runMonitor = await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/monitor/run`, { method: 'POST', headers: ownerAuth });
+      const monitorBody = (await runMonitor.json()) as { ok?: boolean; insightsCreated?: number };
+      check('AI monitor scan runs and reports signal counts', runMonitor.status === 200 && monitorBody.ok === true && typeof monitorBody.insightsCreated === 'number');
+      const insightsList = await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/insights?status=ALL`, { headers: ownerAuth });
+      check('owner reads the AI insights feed', insightsList.status === 200 && Array.isArray(((await insightsList.json()) as { data: unknown[] }).data));
+
       // ---- Flow S: suspended company is refused, then reactivated (F5) ----
       await fetch(`http://127.0.0.1:${PORT}/api/v1/platform/tenants/${acmeId}`, { method: 'PATCH', headers: { ...ownerAuth, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'SUSPENDED' }) });
       const suspendedList = await fetch(`http://127.0.0.1:${PORT}/api/v1/packages?tenant=${tenantSlug}`);

@@ -17,7 +17,10 @@ import {
   LogNotificationSender,
   runExpiryCycle,
   runFupEvaluationCycle,
+  runMonitorCycle,
   runPaymentReconciliation,
+  runPlatformBillingCycle,
+  runPlatformInvoiceReconciliation,
 } from '@nexora/engines';
 import { MockPaymentProvider, MpesaDarajaProvider, type PaymentProvider } from '@nexora/payment-sdk';
 import { mpesaEnvSchema } from '@nexora/config';
@@ -26,7 +29,7 @@ const OUTBOX_POLL_MS = 2_000;
 const JOB_POLL_MS = 3_000;
 const NOTIFY_POLL_MS = 5_000;
 const OUTBOX_BATCH = 50;
-const JOB_TYPES = ['subscription-expiry', 'fup-evaluation', 'session-cleanup', 'payment-reconciliation'] as const;
+const JOB_TYPES = ['subscription-expiry', 'fup-evaluation', 'session-cleanup', 'payment-reconciliation', 'platform-billing', 'platform-monitor'] as const;
 
 function buildPaymentProvider(): PaymentProvider {
   if (process.env.PAYMENT_PROVIDER === 'mpesa') {
@@ -89,7 +92,19 @@ async function executeJob(prisma: PrismaClient, logger: Logger, job: { id: strin
           defaultCallbackUrl: process.env.MPESA_CALLBACK_URL,
         });
         const summary = await runPaymentReconciliation(prisma, resolver);
-        result = `checked=${summary.checked} confirmed=${summary.confirmed} failed=${summary.failed} cancelled=${summary.cancelled} expired=${summary.expired} pending=${summary.stillPending} errors=${summary.providerErrors}`;
+        // Also close out in-flight ISP->platform subscription payments (§91b).
+        const platform = await runPlatformInvoiceReconciliation(prisma, resolver);
+        result = `checked=${summary.checked} confirmed=${summary.confirmed} failed=${summary.failed} cancelled=${summary.cancelled} expired=${summary.expired} pending=${summary.stillPending} errors=${summary.providerErrors} | plat_checked=${platform.checked} plat_paid=${platform.paid} plat_closed=${platform.attemptsClosed}`;
+        break;
+      }
+      case 'platform-billing': {
+        const summary = await runPlatformBillingCycle(prisma);
+        result = `issued=${summary.invoicesIssued} overdue=${summary.markedOverdue} pastDue=${summary.markedPastDue}`;
+        break;
+      }
+      case 'platform-monitor': {
+        const summary = await runMonitorCycle(prisma);
+        result = `signals=${summary.signalsFound} created=${summary.insightsCreated}`;
         break;
       }
       default:

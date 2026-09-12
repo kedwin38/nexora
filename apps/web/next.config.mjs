@@ -4,8 +4,6 @@ const nextConfig = {
   // so the browser only ever talks to one origin.
   async rewrites() {
     const apiBase = process.env.API_PROXY_URL ?? 'http://localhost:5000';
-    console.log('[next.config] API_PROXY_URL env var:', process.env.API_PROXY_URL);
-    console.log('[next.config] Using apiBase:', apiBase);
     return [{ source: '/api/:path*', destination: `${apiBase}/api/:path*` }];
   },
 };

@@ -14,7 +14,7 @@
 
 import { databaseEnvSchema, parseEnv } from '@nexora/config';
 import { createLogger, type Logger } from '@nexora/logging';
-import { createPrismaClient, disposePrismaClient, type PrismaClient } from '@nexora/db';
+import { createPrismaClient, disposePrismaClient, waitForSchemaReady, type PrismaClient } from '@nexora/db';
 import {
   runReconciliationCycle,
   runRouterHealthCheck,
@@ -208,7 +208,11 @@ async function main(): Promise<void> {
   const mode: 'mock' | 'mikrotik' = process.env.ROUTER_ADAPTER === 'mikrotik' ? 'mikrotik' : 'mock';
   const mockRouter = mode === 'mock' ? new MockRouterAdapter() : null;
 
-  await prisma.$queryRaw`SELECT 1`;
+  // Wait for the api's migration before touching tables (parallel deploys).
+  logger.info('Network worker waiting for database schema…');
+  await waitForSchemaReady(prisma, {
+    onWait: (attempt) => logger.warn('Schema not ready yet — waiting for migrations', { attempt }),
+  });
   logger.info('Network worker started — operation executor active', {
     env: env.APP_ENV,
     adapter: mode,

@@ -9,7 +9,7 @@
 
 import { databaseEnvSchema, parseEnv } from '@nexora/config';
 import { createLogger } from '@nexora/logging';
-import { createPrismaClient, disposePrismaClient } from '@nexora/db';
+import { createPrismaClient, disposePrismaClient, waitForSchemaReady } from '@nexora/db';
 
 const TICK_SECONDS_DEFAULT = 60;
 
@@ -19,7 +19,12 @@ async function main(): Promise<void> {
   const prisma = createPrismaClient();
   const tickMs = (Number(process.env.SCHEDULER_TICK_SECONDS ?? TICK_SECONDS_DEFAULT) || TICK_SECONDS_DEFAULT) * 1000;
 
-  await prisma.$queryRaw`SELECT 1`;
+  // Wait for the api's migration to create the schema before touching tables —
+  // services deploy in parallel, so the DB can be reachable but not yet migrated.
+  logger.info('Scheduler waiting for database schema…');
+  await waitForSchemaReady(prisma, {
+    onWait: (attempt) => logger.warn('Schema not ready yet — waiting for migrations', { attempt }),
+  });
   logger.info('Scheduler started — enqueueing job records', { env: env.APP_ENV, tickMs });
 
   const enqueue = (type: string, cronExpression: string): void => {

@@ -12,6 +12,23 @@ import { z } from 'zod';
 export const logLevelSchema = z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']);
 export const nodeEnvSchema = z.enum(['development', 'test', 'production']);
 
+/**
+ * A forgiving public-URL field. Platform hosts (Railway, etc.) often expose a
+ * service's domain as a BARE hostname (`my-api.up.railway.app`) with no scheme,
+ * and an unresolved reference can arrive as an empty string. Rather than crash
+ * the whole service on boot, normalize: empty -> undefined (the field is
+ * optional), bare host -> `https://host`, strip a trailing slash, and only then
+ * reject something that still isn't a URL (e.g. an unfilled `<placeholder>`).
+ */
+function optionalPublicUrl(): z.ZodType<string | undefined, z.ZodTypeDef, unknown> {
+  return z.preprocess((raw) => {
+    if (typeof raw !== 'string') return undefined;
+    const trimmed = raw.trim().replace(/\/+$/, '');
+    if (trimmed === '') return undefined;
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }, z.string().url().optional());
+}
+
 export const baseEnvSchema = z.object({
   NODE_ENV: nodeEnvSchema.default('development'),
   APP_ENV: z.string().default('local'),
@@ -42,8 +59,9 @@ export const apiEnvSchema = databaseEnvSchema.merge(redisEnvSchema).extend({
   ROUTER_ADAPTER: z.enum(['mock', 'mikrotik']).default('mock'),
   CORS_ORIGIN: z.string().default('*'),
   /** Public origin of the API (used to build per-tenant M-Pesa callback URLs
-   *  and the default webhook URL). e.g. https://api.nexora.co.ke */
-  PUBLIC_BASE_URL: z.string().url().optional(),
+   *  and the default webhook URL). e.g. https://api.nexora.co.ke — a bare host
+   *  is accepted and normalized to https://, and an empty value is ignored. */
+  PUBLIC_BASE_URL: optionalPublicUrl(),
   /** AES-256-GCM master key for tenant-supplied credentials at rest (ADR-013).
    *  Required for any tenant to self-configure M-Pesa; optional otherwise. */
   CREDENTIALS_ENCRYPTION_KEY: z.string().min(32).optional(),

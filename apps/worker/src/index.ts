@@ -9,7 +9,7 @@
 
 import { databaseEnvSchema, parseEnv } from '@nexora/config';
 import { createLogger, type Logger } from '@nexora/logging';
-import { createPrismaClient, disposePrismaClient, type PrismaClient } from '@nexora/db';
+import { createPrismaClient, disposePrismaClient, waitForSchemaReady, type PrismaClient } from '@nexora/db';
 import {
   createNotificationsFromOutbox,
   createTenantPaymentResolver,
@@ -121,7 +121,11 @@ async function main(): Promise<void> {
   const logger = createLogger({ service: 'worker', level: env.LOG_LEVEL });
   const prisma = createPrismaClient();
 
-  await prisma.$queryRaw`SELECT 1`;
+  // Wait for the api's migration before touching tables (parallel deploys).
+  logger.info('Worker waiting for database schema…');
+  await waitForSchemaReady(prisma, {
+    onWait: (attempt) => logger.warn('Schema not ready yet — waiting for migrations', { attempt }),
+  });
   logger.info('Worker started — outbox dispatcher + job runner', { env: env.APP_ENV });
 
   let running = true;

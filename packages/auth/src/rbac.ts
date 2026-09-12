@@ -59,9 +59,16 @@ export const PERMISSIONS = [
   // Tenant self-service (a company's own settings, within its own tenant)
   'tenant.read',
   'tenant.manage',
-  // Platform governance (cross-tenant — PLATFORM_OWNER only)
+  // Platform governance (cross-tenant — PLATFORM_OWNER only). "Elite" surface.
   'platform.read',
   'platform.manage',
+  'platform.analytics.read',
+  'platform.tenants.manage',
+  'platform.plans.manage',
+  'platform.billing.manage',
+  'platform.payments.manage',
+  'platform.insights.manage',
+  'platform.impersonate',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

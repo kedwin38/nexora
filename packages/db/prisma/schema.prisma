@@ -215,6 +215,36 @@ enum AuditResult {
   FAILURE
 }
 
+/// A tenant's standing on its platform subscription (owner bills the ISP).
+enum TenantPlanStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum PlatformInvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+  VOID
+}
+
+/// Operations-monitor finding severity (owner-facing insight feed).
+enum InsightSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum InsightStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
 // ===========================================================================
 // TENANTS (companies) — the multi-tenant boundary (§91)
 // ===========================================================================
@@ -255,18 +285,107 @@ model Tenant {
   mpesaConsumerSecretEnc String? // encrypted
   mpesaConfiguredAt   DateTime?
 
+  // Platform subscription (the owner bills the ISP for platform access, §91b).
+  planId          String?
+  plan            SubscriptionPlan? @relation(fields: [planId], references: [id])
+  planStatus      TenantPlanStatus  @default(TRIALING)
+  trialEndsAt     DateTime?
+  currentPeriodEnd DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users         User[]
-  customers     Customer[]
-  packages      Package[]
-  subscriptions Subscription[]
-  routers       Router[]
-  payments      Payment[]
-  notifications Notification[]
+  users            User[]
+  customers        Customer[]
+  packages         Package[]
+  subscriptions    Subscription[]
+  routers          Router[]
+  payments         Payment[]
+  notifications    Notification[]
+  platformInvoices PlatformInvoice[]
+  insights         PlatformInsight[]
 
   @@index([status])
+  @@index([planStatus])
+}
+
+/// Platform subscription plan the OWNER sells to ISPs (monthly tiers). Global
+/// catalogue owned by the platform — not tenant-scoped. Soft limits are
+/// advisory quotas surfaced in the UI; enforcement is additive later.
+model SubscriptionPlan {
+  id           String   @id @default(uuid())
+  code         String   @unique // e.g. "starter", "growth", "scale"
+  name         String
+  description  String?
+  priceMinor   Int      // per interval, in minor units (cents)
+  currency     String   @default("KES")
+  interval     String   @default("MONTHLY") // MONTHLY | YEARLY
+  trialDays    Int      @default(14)
+  maxStaff     Int?     // advisory quotas (null = unlimited)
+  maxRouters   Int?
+  maxCustomers Int?
+  features     Json?    // string[] of marketing bullets
+  displayOrder Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenants  Tenant[]
+  invoices PlatformInvoice[]
+
+  @@index([active, displayOrder])
+}
+
+/// An invoice the platform raises against an ISP for its subscription. Paid by
+/// the ISP to the PLATFORM's own M-Pesa (the `platform` tenant's Daraja config).
+model PlatformInvoice {
+  id                    String                @id @default(uuid())
+  number                String                @unique
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  planId                String?
+  plan                  SubscriptionPlan?     @relation(fields: [planId], references: [id])
+  amountMinor           Int
+  currency              String                @default("KES")
+  periodStart           DateTime
+  periodEnd             DateTime
+  dueDate               DateTime
+  status                PlatformInvoiceStatus @default(PENDING)
+  provider              PaymentProvider       @default(MPESA)
+  providerTransactionId String? // CheckoutRequestID for the STK that pays it
+  receipt               String?
+  phoneNumber           String?
+  failureReason         String?
+  issuedAt              DateTime              @default(now())
+  paidAt                DateTime?
+  metadata              Json?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([provider, providerTransactionId])
+  @@index([tenantId, status])
+  @@index([status, dueDate])
+}
+
+/// Owner-facing operations-monitor finding (the "AI monitor" output). Written
+/// by the rule-based monitor engine; a Claude narrative layer can enrich it.
+model PlatformInsight {
+  id             String          @id @default(uuid())
+  code           String // stable signal id, e.g. "PAYMENT_FAILURE_SPIKE"
+  severity       InsightSeverity @default(INFO)
+  category       String // billing | payments | network | reliability | growth
+  title          String
+  detail         String
+  metrics        Json?
+  tenantId       String?
+  tenant         Tenant?         @relation(fields: [tenantId], references: [id])
+  status         InsightStatus   @default(OPEN)
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  createdAt      DateTime        @default(now())
+
+  @@index([status, severity, createdAt])
+  @@index([code, createdAt])
 }
 
 // ===========================================================================

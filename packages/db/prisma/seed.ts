@@ -46,6 +46,22 @@ async function seedPlatformOwner(): Promise<void> {
   console.log(`Platform owner seeded: ${email}`);
 }
 
+async function seedPlans(): Promise<void> {
+  const plans = [
+    { code: 'starter', name: 'Starter', priceMinor: 250000, trialDays: 14, maxStaff: 3, maxRouters: 1, maxCustomers: 200, displayOrder: 0, description: 'For a new ISP getting online.', features: ['1 router / site', 'Up to 200 customers', '3 staff seats', 'M-Pesa Pay Bill or Till', 'Email support'] },
+    { code: 'growth', name: 'Growth', priceMinor: 750000, trialDays: 14, maxStaff: 10, maxRouters: 5, maxCustomers: 2000, displayOrder: 1, description: 'For a growing regional ISP.', features: ['Up to 5 routers / sites', 'Up to 2,000 customers', '10 staff seats', 'FUP + reconciliation', 'Priority support'] },
+    { code: 'scale', name: 'Scale', priceMinor: 2000000, trialDays: 14, maxStaff: null, maxRouters: null, maxCustomers: null, displayOrder: 2, description: 'For a multi-site operator at scale.', features: ['Unlimited routers / sites', 'Unlimited customers', 'Unlimited staff', 'Full analytics + AI monitor', 'Dedicated support'] },
+  ];
+  for (const p of plans) {
+    await prisma.subscriptionPlan.upsert({
+      where: { code: p.code },
+      update: { name: p.name, priceMinor: p.priceMinor, description: p.description, features: p.features, displayOrder: p.displayOrder, active: true },
+      create: { code: p.code, name: p.name, priceMinor: p.priceMinor, trialDays: p.trialDays, maxStaff: p.maxStaff, maxRouters: p.maxRouters, maxCustomers: p.maxCustomers, displayOrder: p.displayOrder, description: p.description, features: p.features },
+    });
+  }
+  console.log(`Subscription plans seeded: ${plans.length}`);
+}
+
 async function seedRbac(): Promise<void> {
   for (const key of PERMISSIONS) {
     await prisma.permission.upsert({ where: { key }, update: {}, create: { key } });
@@ -193,6 +209,7 @@ async function main(): Promise<void> {
   await seedRbac();
   await seedSuperAdmin();
   await seedPlatformOwner();
+  await seedPlans();
   await seedPackages();
   await seedRouter();
 }

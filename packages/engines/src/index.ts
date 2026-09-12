@@ -6,3 +6,5 @@ export * from './notifications.js';
 export * from './activation.js';
 export * from './payment-reconciliation.js';
 export * from './payment-provider-resolver.js';
+export * from './platform-billing.js';
+export * from './monitor.js';

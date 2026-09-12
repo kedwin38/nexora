@@ -63,6 +63,9 @@ async function main(): Promise<void> {
       ['router-health', '*/1 * * * *'],
       // Closes out stale/cancelled/timed-out payments — no payment left hanging (§16).
       ['payment-reconciliation', '*/2 * * * *'],
+      // Platform billing (owner bills ISPs) + AI operations monitor (§91b).
+      ['platform-billing', '0 * * * *'],
+      ['platform-monitor', '*/15 * * * *'],
     ];
     for (const [type, cron] of types) {
       if (!running) break;

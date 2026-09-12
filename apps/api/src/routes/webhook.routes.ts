@@ -18,7 +18,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { paymentMachine } from '@nexora/domain';
-import { activateOnPaymentSuccess } from '@nexora/engines';
+import { activateOnPaymentSuccess, closePlatformInvoiceAttempt, markPlatformInvoicePaid } from '@nexora/engines';
 import { classifyStkResultCode, parseStkCallback } from '@nexora/payment-sdk';
 import type { NexoraContext } from '../context.js';
 
@@ -51,6 +51,26 @@ export async function registerWebhookRoutes(app: FastifyInstance, nexora: Nexora
         });
 
         if (payment === null) {
+          // Maybe it's an ISP paying a PLATFORM subscription invoice (§91b).
+          const invoice = await nexora.prisma.platformInvoice.findUnique({
+            where: { provider_providerTransactionId: { provider: 'MPESA', providerTransactionId: callback.providerTransactionId } },
+          });
+          if (invoice !== null) {
+            if (invoice.status === 'PAID') {
+              return await reply.status(200).send({ received: true }); // idempotent replay
+            }
+            if (callback.resultCode === 0) {
+              if (callback.amountMinor !== undefined && callback.amountMinor !== invoice.amountMinor) {
+                await closePlatformInvoiceAttempt(nexora.prisma, invoice.id, 'AMOUNT_MISMATCH');
+              } else {
+                await markPlatformInvoicePaid(nexora.prisma, invoice.id, { receipt: callback.receipt ?? 'UNKNOWN', providerTransactionId: callback.providerTransactionId });
+              }
+            } else {
+              const outcome = classifyStkResultCode(callback.resultCode);
+              await closePlatformInvoiceAttempt(nexora.prisma, invoice.id, `${outcome}: ${callback.resultDesc}`);
+            }
+            return await reply.status(200).send({ received: true });
+          }
           // Not ours (test ping / cross-wired shortcode) — acknowledge and ignore.
           nexora.logger.warn('M-Pesa callback for unknown transaction', { correlationId });
           return await reply.status(200).send({ received: true });

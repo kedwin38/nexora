@@ -13,8 +13,9 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ConflictError, ValidationError } from '@nexora/domain';
+import { ConflictError, NotFoundError, ValidationError } from '@nexora/domain';
 import { encryptSecret } from '@nexora/auth';
+import { normalizeKenyanMsisdn } from '@nexora/payment-sdk';
 import type { NexoraContext } from '../context.js';
 import { writeAudit } from '../plugins/auth.js';
 import { createOutboxEvent } from '../outbox.js';
@@ -311,6 +312,81 @@ export async function registerTenantRoutes(app: FastifyInstance, nexora: NexoraC
         ipAddress: request.ip,
       });
       return await reply.status(200).send({ ok: true });
+    },
+  );
+
+  // ---- Company's own platform subscription & invoices (ISP pays platform) -
+  app.get(
+    '/api/v1/admin/billing',
+    { preHandler: [app.requirePermission('tenant.read')] },
+    async (request, reply) => {
+      const tenantId = request.principal!.tenantId;
+      const tenant = await nexora.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, include: { plan: true } });
+      const invoices = await nexora.prisma.platformInvoice.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 24,
+        include: { plan: { select: { name: true } } },
+      });
+      return await reply.status(200).send({
+        plan: tenant.plan === null ? null : { code: tenant.plan.code, name: tenant.plan.name, priceMinor: tenant.plan.priceMinor, interval: tenant.plan.interval },
+        planStatus: tenant.planStatus,
+        trialEndsAt: tenant.trialEndsAt?.toISOString() ?? null,
+        currentPeriodEnd: tenant.currentPeriodEnd?.toISOString() ?? null,
+        invoices: invoices.map((i) => ({
+          id: i.id, number: i.number, plan: i.plan?.name ?? null, amountMinor: i.amountMinor, currency: i.currency,
+          status: i.status, dueDate: i.dueDate.toISOString(), periodEnd: i.periodEnd.toISOString(),
+          paidAt: i.paidAt?.toISOString() ?? null, receipt: i.receipt,
+          // A PENDING/OVERDUE invoice with a live provider txn has a payment in flight.
+          paymentInFlight: (i.status === 'PENDING' || i.status === 'OVERDUE') && i.providerTransactionId !== null,
+        })),
+      });
+    },
+  );
+
+  // Pay an outstanding platform invoice via STK to the PLATFORM's M-Pesa.
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    '/api/v1/admin/billing/invoices/:id/pay',
+    { preHandler: [app.requirePermission('payment.config.manage')], config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const input = parseOrThrow(z.object({ phone: z.string() }), request.body, request.id);
+      const phone = normalizeKenyanMsisdn(input.phone);
+      if (phone === null) throw new ValidationError('Invalid Kenyan phone number.', undefined, request.id);
+
+      const invoice = await nexora.prisma.platformInvoice.findFirst({
+        where: { id: request.params.id, tenantId: request.principal!.tenantId, status: { in: ['PENDING', 'OVERDUE'] } },
+      });
+      if (invoice === null) throw new NotFoundError('PlatformInvoice', request.params.id, request.id);
+      if (invoice.providerTransactionId !== null) {
+        return await reply.status(409).send({ error: { code: 'PAYMENT_IN_FLIGHT', message: 'A payment for this invoice is already being processed.', correlationId: request.id, retryable: true } });
+      }
+
+      let providerTransactionId: string;
+      try {
+        const provider = await nexora.paymentsFor('platform');
+        const push = await provider.initiateStkPush({
+          phoneNumber: phone,
+          amountMinor: invoice.amountMinor,
+          accountReference: invoice.number.slice(0, 12),
+          description: 'NEXORA subscription',
+          transactionReference: `${invoice.id}:${Date.now()}`,
+        });
+        providerTransactionId = push.providerTransactionId;
+      } catch {
+        return await reply.status(502).send({ error: { code: 'PAYMENT_PROVIDER_ERROR', message: 'Payment provider rejected the request. Ask the platform owner to configure M-Pesa.', correlationId: request.id, retryable: true } });
+      }
+
+      await nexora.prisma.platformInvoice.update({
+        where: { id: invoice.id },
+        data: {
+          providerTransactionId,
+          phoneNumber: phone,
+          failureReason: null,
+          metadata: { payAttemptAt: new Date().toISOString() },
+        },
+      });
+      await writeAudit(nexora, { action: 'PLATFORM_INVOICE_PAYMENT_INITIATED', resourceType: 'PlatformInvoice', resourceId: invoice.id, actor: request.principal, correlationId: request.id, ipAddress: request.ip });
+      return await reply.status(202).send({ ok: true, status: 'PENDING', message: 'STK push sent. Complete the payment on your phone.' });
     },
   );
 }

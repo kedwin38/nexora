@@ -13,12 +13,13 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ConflictError, NotFoundError, ValidationError } from '@nexora/domain';
+import { NotFoundError, ValidationError } from '@nexora/domain';
 import { encryptSecret } from '@nexora/auth';
 import { normalizeKenyanMsisdn } from '@nexora/payment-sdk';
 import type { NexoraContext } from '../context.js';
 import { writeAudit } from '../plugins/auth.js';
 import { createOutboxEvent } from '../outbox.js';
+import { provisionCompany } from '../services/provision-company.js';
 
 function parseOrThrow<T extends z.ZodTypeAny>(schema: T, body: unknown, requestId: string): z.infer<T> {
   const parsed = schema.safeParse(body);
@@ -28,15 +29,6 @@ function parseOrThrow<T extends z.ZodTypeAny>(schema: T, body: unknown, requestI
     }, requestId);
   }
   return parsed.data;
-}
-
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
 }
 
 const signupSchema = z.object({
@@ -81,97 +73,8 @@ export async function registerTenantRoutes(app: FastifyInstance, nexora: NexoraC
       }
       const input = parseOrThrow(signupSchema, request.body, request.id);
 
-      // Resolve a unique slug.
-      const base = input.slug ?? slugify(input.companyName);
-      if (base.length < 2) throw new ValidationError('Could not derive a valid company slug.', undefined, request.id);
-      let slug = base;
-      for (let n = 1; (await nexora.prisma.tenant.findUnique({ where: { slug } })) !== null; n += 1) {
-        slug = `${base}-${n}`;
-      }
-
-      const emailTaken = await nexora.prisma.user.findUnique({ where: { email: input.adminEmail } });
-      if (emailTaken !== null) {
-        throw new ConflictError('That admin email is already registered.', undefined, request.id);
-      }
-
-      const superRole = await nexora.prisma.role.findUniqueOrThrow({ where: { name: 'SUPER_ADMIN' } });
-      const passwordHash = await nexora.hasher.hash(input.adminPassword);
-
-      const { tenant, user } = await nexora.prisma.$transaction(async (tx) => {
-        const tenant = await tx.tenant.create({
-          data: {
-            slug,
-            name: input.companyName,
-            status: 'TRIAL',
-            contactEmail: input.adminEmail,
-            ...(input.contactPhone !== undefined ? { contactPhone: input.contactPhone } : {}),
-            ...(input.country !== undefined ? { country: input.country.toUpperCase() } : {}),
-          },
-        });
-        const user = await tx.user.create({
-          data: {
-            tenantId: tenant.id,
-            email: input.adminEmail,
-            passwordHash,
-            displayName: input.adminName,
-            roleId: superRole.id,
-          },
-        });
-
-        // Clone the reference catalogue so the company can sell immediately.
-        const starters = await tx.package.findMany({
-          where: { tenantId: 'default', status: 'ACTIVE' },
-          include: { policy: true },
-          orderBy: { displayOrder: 'asc' },
-        });
-        for (const pkg of starters) {
-          const cloned = await tx.package.create({
-            data: {
-              tenantId: tenant.id,
-              name: pkg.name,
-              description: pkg.description,
-              currency: pkg.currency,
-              priceMinor: pkg.priceMinor,
-              durationSeconds: pkg.durationSeconds,
-              status: 'ACTIVE',
-              maxDevices: pkg.maxDevices,
-              displayOrder: pkg.displayOrder,
-            },
-          });
-          if (pkg.policy !== null) {
-            await tx.packagePolicy.create({
-              data: {
-                packageId: cloned.id,
-                downloadKbps: pkg.policy.downloadKbps,
-                uploadKbps: pkg.policy.uploadKbps,
-                burstDownloadKbps: pkg.policy.burstDownloadKbps,
-                burstUploadKbps: pkg.policy.burstUploadKbps,
-                fupLimitBytes: pkg.policy.fupLimitBytes,
-                fupWarningPercent: pkg.policy.fupWarningPercent,
-                fupThrottleDownloadKbps: pkg.policy.fupThrottleDownloadKbps,
-                fupThrottleUploadKbps: pkg.policy.fupThrottleUploadKbps,
-                fupResetPolicy: pkg.policy.fupResetPolicy,
-                sessionTimeLimitSeconds: pkg.policy.sessionTimeLimitSeconds,
-              },
-            });
-          }
-        }
-        return { tenant, user };
-      });
-
-      await createOutboxEvent(nexora, {
-        eventType: 'TENANT_CREATED',
-        aggregateType: 'Tenant',
-        aggregateId: tenant.id,
-        payload: { tenantId: tenant.id, slug: tenant.slug, name: tenant.name },
-        correlationId: request.id,
-      });
-      await writeAudit(nexora, {
-        action: 'TENANT_CREATED',
-        resourceType: 'Tenant',
-        resourceId: tenant.id,
+      const { tenant, user } = await provisionCompany(nexora, input, {
         actor: null,
-        afterState: { slug: tenant.slug, name: tenant.name, admin: user.email },
         correlationId: request.id,
         ipAddress: request.ip,
       });

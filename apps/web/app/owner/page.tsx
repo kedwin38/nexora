@@ -163,6 +163,8 @@ interface Plan { id: string; code: string; name: string; description: string | n
 function Companies({ flash }: { flash: Flash }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [form, setForm] = useState({ companyName: '', adminName: '', adminEmail: '', adminPassword: '', planId: '' });
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     void (async () => {
@@ -185,9 +187,41 @@ function Companies({ flash }: { flash: Flash }) {
     if (planId === '') return;
     try { await api(`/api/v1/platform/tenants/${id}/plan`, { method: 'PUT', body: JSON.stringify({ planId }) }); flash('Plan assigned (trial started).'); load(); } catch (e) { handle(e, flash); }
   };
+  const createCompany = async () => {
+    if (form.companyName.trim() === '' || form.adminEmail.trim() === '' || form.adminPassword.length < 10) {
+      flash('Company name, admin email, and a 10+ char password are required.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api('/api/v1/platform/tenants', { method: 'POST', body: JSON.stringify({
+        companyName: form.companyName, adminName: form.adminName || form.companyName, adminEmail: form.adminEmail,
+        adminPassword: form.adminPassword, ...(form.planId ? { planId: form.planId } : {}),
+      }) });
+      flash('Company created — admin can now sign in.');
+      setForm({ companyName: '', adminName: '', adminEmail: '', adminPassword: '', planId: '' });
+      load();
+    } catch (e) { handle(e, flash); } finally { setBusy(false); }
+  };
   const reserved = (slug: string) => slug === 'default' || slug === 'platform';
 
   return (
+    <>
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="k">Onboard a new ISP</div><br />
+      <div className="grid c3">
+        <input placeholder="company name" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} />
+        <input placeholder="admin name" value={form.adminName} onChange={(e) => setForm({ ...form, adminName: e.target.value })} />
+        <input placeholder="admin email" value={form.adminEmail} onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} />
+        <input type="password" placeholder="admin password (min 10)" value={form.adminPassword} onChange={(e) => setForm({ ...form, adminPassword: e.target.value })} />
+        <select value={form.planId} onChange={(e) => setForm({ ...form, planId: e.target.value })}>
+          <option value="">— no plan (assign later) —</option>
+          {plans.map((p) => <option key={p.id} value={p.id}>{p.name} ({fmtKes(p.priceMinor)})</option>)}
+        </select>
+        <button disabled={busy} onClick={() => void createCompany()}>CREATE COMPANY</button>
+      </div>
+      <p className="sub" style={{ marginTop: 8 }}>Creates the company, its first SUPER_ADMIN, and a starter catalogue. Works regardless of public-signup settings.</p>
+    </div>
     <div className="card">
       <div className="k">All companies on NEXORA</div><br />
       <table>
@@ -216,6 +250,7 @@ function Companies({ flash }: { flash: Flash }) {
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 

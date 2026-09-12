@@ -318,7 +318,7 @@ export async function registerTenantRoutes(app: FastifyInstance, nexora: NexoraC
   // ---- Company's own platform subscription & invoices (ISP pays platform) -
   app.get(
     '/api/v1/admin/billing',
-    { preHandler: [app.requirePermission('tenant.read')] },
+    { preHandler: [app.requirePermission('payment.config.manage')] },
     async (request, reply) => {
       const tenantId = request.principal!.tenantId;
       const tenant = await nexora.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, include: { plan: true } });

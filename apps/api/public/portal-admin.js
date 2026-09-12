@@ -12,7 +12,7 @@ views.admin = async (tab) => {
     ['packages', 'Packages', 'package.read'],
     ['ops', 'Network', 'network_operation.read'],
     ['users', 'Staff', 'user.read'],
-    ['billing', 'Billing', 'tenant.read'],
+    ['billing', 'Billing', 'payment.config.manage'],
     ['settings', 'Settings', 'tenant.manage'],
     ['triggers', 'Automation', 'monitoring.read'],
   ];
